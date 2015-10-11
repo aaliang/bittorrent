@@ -50,9 +50,7 @@ fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where
 fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<Bencode>, I> where I:Stream<Item=char> {
     let (open, close) = (char('l'), char('e'));
     let list_contents = many(parser(bencode_integer).or(parser(bencode_string)));
-    let mut list = between(open, close, list_contents).map(|x| {
-        x
-    });
+    let mut list = between(open, close, list_contents);
     list.parse_state(input)
 }
 
