@@ -15,7 +15,7 @@ use combine::combinator::{Between, Token, FnParser, satisfy};
 //
 pub enum Bencode {
     Number(i64),
-    String(Vec<u8>)
+    String(String)
 }
 
 fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
@@ -109,4 +109,10 @@ fn test_integer() {
 fn test_string() {
     let result = parser(bencode_string).parse("5:abcde");
     assert_eq!(result, Ok(("abcde".to_string(), "")));;
+}
+
+//#[test]
+fn test_list_integer() {
+    let result = parser(bencode_list).parse("li57ei32ee");
+    assert_eq!(result, Ok((vec![57, 32], "")));
 }
