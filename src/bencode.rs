@@ -39,19 +39,8 @@ fn bencode_integer<I>(input: State<I>) -> ParseResult<i64, I> where I:Stream<Ite
 }
 
 fn bencode_string<I>(input: State<I>) -> ParseResult<String, I> where I:Stream<Item=char> {
-    /*
-    
-    let (len, consumed) = match bencode_string_length_prefix(input.clone()) {
-        Ok((len, consumed)) => (len, consumed),
-        e => return e
-    };
-    println!("pos: {}", input.position);
-//    println!("input.input: {}", input.input);
-//    Ok((len, consumed))
-
-    consumed.combine(take(len))*/
-
-    take(4).parse_state(input)
+    let (len, input_) = try!(bencode_string_length_prefix(input));
+    input_.combine(|input__| take(len).parse_state(input__))
 }
 
 fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where I:Stream<Item=char> {
@@ -68,7 +57,7 @@ fn take <I> (num: i32) -> SizedBuffer<I> where I: Stream<Item=char> {
 pub struct SizedBuffer <I>(i32, PhantomData<I>);
 impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
     type Input = I;
-    type Output = String; //although maybe its a vec<u8>
+    type Output = String;
     fn parse_lazy(&mut self, mut input: State<I>) -> ParseResult<String, I> {
         let start = input.position;
         let mut vec_buf:Vec<char> = Vec::new();
@@ -100,7 +89,7 @@ fn main () {
 
     //let result = parser(bencode_integer).parse("i5e");
     //let result = parser(bencode_string).parse("3:sss");
-    let result = parser(bencode_string).parse("3:sssssss");
+    let result = parser(bencode_string).parse("5:abcde");
 
     match result {
         Ok((a, _)) => println!("found {}", a),
