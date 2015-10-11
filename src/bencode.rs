@@ -26,7 +26,8 @@ fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
 }
 
 enum Expr {
-    Integer(i64)
+    Integer(i64),
+    String(String)
 }
 
 //TODO: this does not handle negatives, yo
@@ -47,6 +48,16 @@ fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where
     let many_digit = many1::<String, _>(digit());
     let mut get_len = (many_digit, char(':')).map(|(length, _)| length.parse::<i32>().unwrap());
     get_len.parse_state(input)
+}
+
+//for now only handle i64s
+fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<i64>, I> where I:Stream<Item=char> {
+    let (open, close) = (char('l'), char('e'));
+    let list_contents = many(parser(bencode_integer));
+    let mut list = between(open, close, list_contents).map(|x| {
+        x
+    });
+    list.parse_state(input)
 }
 
 fn take <I> (num: i32) -> SizedBuffer<I> where I: Stream<Item=char> {
@@ -86,13 +97,16 @@ fn main () {
         Ok(v) => println!("file: {}", v),
         Err(e) => panic!("Not a UTF-8 String: {}", e)
     }
+}
 
-    //let result = parser(bencode_integer).parse("i5e");
-    //let result = parser(bencode_string).parse("3:sss");
+#[test]
+fn test_integer() {
+    let result = parser(bencode_integer).parse("i57e");
+    assert_eq!(result, Ok((57,"")));
+}
+
+#[test]
+fn test_string() {
     let result = parser(bencode_string).parse("5:abcde");
-
-    match result {
-        Ok((a, _)) => println!("found {}", a),
-        Err(e) => println!("{}", e)
-    }
+    assert_eq!(result, Ok(("abcde".to_string(), "")));;
 }
