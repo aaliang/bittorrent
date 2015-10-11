@@ -23,7 +23,8 @@ fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
 #[derive(Debug, Eq, PartialEq)]
 enum Bencode {
     Int(i64),
-    String(String)
+    String(String),
+    List(Vec<Bencode>)
 }
 
 //TODO: this does not handle negatives, yo
@@ -47,10 +48,10 @@ fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where
 }
 
 //for now only handle i64s
-fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<Bencode>, I> where I:Stream<Item=char> {
+fn bencode_list<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
     let (open, close) = (char('l'), char('e'));
     let list_contents = many(parser(bencode_integer).or(parser(bencode_string)));
-    let mut list = between(open, close, list_contents);
+    let mut list = between(open, close, list_contents).map(|x| Bencode::List(x));
     list.parse_state(input)
 }
 
@@ -108,12 +109,12 @@ fn test_string() {
 #[test]
 fn test_list() {
     let homogenous_int_list = parser(bencode_list).parse("li57ei32ee");
-    assert_eq!(homogenous_int_list, Ok((vec![Bencode::Int(57), Bencode::Int(32)], "")));
+    assert_eq!(homogenous_int_list, Ok((Bencode::List(vec![Bencode::Int(57), Bencode::Int(32)]), "")));
 
     let homogenous_str_list = parser(bencode_list).parse("l3:abc5:defghe");
-    assert_eq!(homogenous_str_list, Ok((vec![Bencode::String("abc".to_string()), Bencode::String("defgh".to_string())], "")));
+    assert_eq!(homogenous_str_list, Ok((Bencode::List(vec![Bencode::String("abc".to_string()), Bencode::String("defgh".to_string())]), "")));
 
     let hetero_list = parser(bencode_list).parse("li32e3:abce");
-    assert_eq!(hetero_list, Ok((vec![Bencode::Int(32), Bencode::String("abc".to_string())], "")));
+    assert_eq!(hetero_list, Ok((Bencode::List(vec![Bencode::Int(32), Bencode::String("abc".to_string())]), "")));
 }
 
