@@ -1,5 +1,4 @@
-//#![allow(unused_imports, unused_must_use, unused_variables, dead_code)]
-
+#![allow(unused_imports, unused_must_use, dead_code)]
 extern crate combine;
 
 use std::io::prelude::*;
@@ -7,14 +6,13 @@ use std::fs::File;
 use std::path::Path;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::env;
 use combine::{parser, between, many, many1, digit, char, Parser, ParserExt};
 use combine::primitives::{State, Stream, ParseResult, Consumed};
 use combine::combinator::FnParser;
 
 //my own bencode stuff!
 #[derive(Debug, Eq, PartialEq)]
-enum Bencode {
+pub enum Bencode {
     Int(i64),
     String(String),
     List(Vec<Bencode>),
@@ -100,7 +98,7 @@ impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
     }
 }
 
-fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
+pub fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
     let mut fd = File::open(path).unwrap();
     let mut buffer:Vec<u8> = Vec::new();
     let _ = fd.read_to_end(&mut buffer);
@@ -110,7 +108,7 @@ fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
 //there's probably an argument that this should be a Result as opposed to an Option, as you
 //could potentially be losing error pertinent information in an Option. not going to change it over
 //right now
-fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
+pub fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
     //hack to coerce ascii byte values to rust array sliceof char (UTF-8). necessary to avoid substantial
     //writing of existing combine parser builtins
     let as_string: Vec<char> = byte_vector.iter().map(|x| *x as char).collect();
@@ -120,14 +118,8 @@ fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
     }
 }
 
-fn deserialize_file<P: AsRef<Path>>(path: P) -> Option<Vec<Bencode>> {
+pub fn deserialize_file<P: AsRef<Path>>(path: P) -> Option<Vec<Bencode>> {
     deserialize(open_file(path))
-}
-
-fn main () {
-    let path = env::args().nth(1).unwrap();
-    let cont = deserialize_file(path).unwrap();
-    println!("{:?}", cont);
 }
 
 #[test]

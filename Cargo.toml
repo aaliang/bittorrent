@@ -18,3 +18,6 @@ src = "src/client.rs"
 name = "bencode"
 src = "src/bencode.rs"
 
+[[bin]]
+name = "main"
+src = "src/main.rs"
