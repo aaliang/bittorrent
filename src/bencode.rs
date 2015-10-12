@@ -6,6 +6,7 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
 use std::str;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use combine::{spaces, parser, between, many, many1, digit, char, any, string, token, Parser, ParserExt, ParseError};
 use combine::primitives::{State, Stream, ParseResult, Consumed};
@@ -24,20 +25,21 @@ fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
 enum Bencode {
     Int(i64),
     String(String),
-    List(Vec<Bencode>)
+    List(Vec<Bencode>),
+    Dict(HashMap<String, Bencode>)
 }
 
-fn bencode_integer<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
+fn bencode_integer<I>(input: State<I>) -> ParseResult<i64, I> where I:Stream<Item=char> {
     let (open, close) = (char('i'), char('e'));
     let mut int = between(open, close, many1::<String, _>(digit())).map(|x| {
-        Bencode::Int(x.parse::<i64>().unwrap())
+        x.parse::<i64>().unwrap()
     });
     int.parse_state(input)
 }
 
-fn bencode_string<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
+fn bencode_string<I>(input: State<I>) -> ParseResult<String, I> where I:Stream<Item=char> {
     let (len, input_) = try!(bencode_string_length_prefix(input));
-    input_.combine(|input__| take(len).map(|x| Bencode::String(x)).parse_state(input__))
+    input_.combine(|input__| take(len).parse_state(input__))
 }
 
 fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where I:Stream<Item=char> {
@@ -46,31 +48,31 @@ fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where
     get_len.parse_state(input)
 }
 
-fn bencode_list<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
+fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<Bencode>, I> where I:Stream<Item=char> {
     let (open, close) = (char('l'), char('e'));
-    let bencode_types = parser(bencode_integer)
-                            .or(parser(bencode_string))
-                            .or(parser(bencode_list));
-    let list_contents = many(bencode_types);
-    let mut list = between(open, close, list_contents).map(|x| Bencode::List(x));
+    let bencode_types = parser(bencode_integer).map(Bencode::Int)
+                            .or(parser(bencode_string).map(Bencode::String))
+                            .or(parser(bencode_list).map(Bencode::List))
+                            .or(parser(bencode_dict).map(Bencode::Dict));
+    let list_contents = many::<Vec<Bencode>, _>(bencode_types);
+    let mut list = between(open, close, list_contents);
     list.parse_state(input)
 }
 
-fn bencode_dict<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
+fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> where I:Stream<Item=char> {
     let (open, close) = (char('d'), char('e'));
-    let dict_contents = parser(bencode_integer)
-                            .or(parser(bencode_string))
-                            .or(parser(bencode_list));
+    let dict_contents = parser(bencode_integer).map(Bencode::Int)
+                            .or(parser(bencode_string).map(Bencode::String))
+                            .or(parser(bencode_list).map(Bencode::List))
+                            .or(parser(bencode_dict).map(Bencode::Dict));
     let pairs = (parser(bencode_string), dict_contents);
-    let mut dict = between(open, close, many(pairs)).map(|x:Vec<(Bencode, Bencode)>|{
-        println!("len: {}", x.len());
-        /*let temp_vec = 
-        for v in x {
-            
-        }*/
-        Bencode::String("abc".to_string())
+    let mut dict = between(open, close, many(pairs)).map(|entries:Vec<(String, Bencode)>|{
+        let mut hash_map = HashMap::new();
+        for (k, v) in entries {
+            hash_map.insert(k, v);
+        }
+        hash_map
     });
-
     dict.parse_state(input)
 }
 
@@ -115,27 +117,33 @@ fn main () {
     let result = parser(bencode_dict).parse("d3:abci4ee");
 }
 
+
 #[test]
 fn test_integer() {
     let result = parser(bencode_integer).parse("i57e");
-    assert_eq!(result, Ok((Bencode::Int(57),"")));
+    assert_eq!(result, Ok((57,"")));
 }
 
 #[test]
 fn test_string() {
     let result = parser(bencode_string).parse("5:abcde");
-    assert_eq!(result, Ok((Bencode::String("abcde".to_string()), "")));;
+    assert_eq!(result, Ok(("abcde".to_string(), "")));;
 }
+
 
 #[test]
 fn test_list() {
     let homogenous_int_list = parser(bencode_list).parse("li57ei32ee");
-    assert_eq!(homogenous_int_list, Ok((Bencode::List(vec![Bencode::Int(57), Bencode::Int(32)]), "")));
+    assert_eq!(homogenous_int_list, Ok((vec![Bencode::Int(57), Bencode::Int(32)], "")));
 
     let homogenous_str_list = parser(bencode_list).parse("l3:abc5:defghe");
-    assert_eq!(homogenous_str_list, Ok((Bencode::List(vec![Bencode::String("abc".to_string()), Bencode::String("defgh".to_string())]), "")));
+    assert_eq!(homogenous_str_list, Ok((vec![Bencode::String("abc".to_string()), Bencode::String("defgh".to_string())], "")));
 
     let hetero_list = parser(bencode_list).parse("li32e3:abce");
-    assert_eq!(hetero_list, Ok((Bencode::List(vec![Bencode::Int(32), Bencode::String("abc".to_string())]), "")));
+    assert_eq!(hetero_list, Ok((vec![Bencode::Int(32), Bencode::String("abc".to_string())], "")));
 }
 
+#[test]
+fn test_dict() {
+    
+}
