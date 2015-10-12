@@ -27,7 +27,6 @@ enum Bencode {
     List(Vec<Bencode>)
 }
 
-//TODO: this does not handle negatives, yo
 fn bencode_integer<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
     let (open, close) = (char('i'), char('e'));
     let mut int = between(open, close, many1::<String, _>(digit())).map(|x| {
@@ -47,12 +46,32 @@ fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where
     get_len.parse_state(input)
 }
 
-//for now only handle i64s
 fn bencode_list<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
     let (open, close) = (char('l'), char('e'));
-    let list_contents = many(parser(bencode_integer).or(parser(bencode_string)));
+    let bencode_types = parser(bencode_integer)
+                            .or(parser(bencode_string))
+                            .or(parser(bencode_list));
+    let list_contents = many(bencode_types);
     let mut list = between(open, close, list_contents).map(|x| Bencode::List(x));
     list.parse_state(input)
+}
+
+fn bencode_dict<I>(input: State<I>) -> ParseResult<Bencode, I> where I:Stream<Item=char> {
+    let (open, close) = (char('d'), char('e'));
+    let dict_contents = parser(bencode_integer)
+                            .or(parser(bencode_string))
+                            .or(parser(bencode_list));
+    let pairs = (parser(bencode_string), dict_contents);
+    let mut dict = between(open, close, many(pairs)).map(|x:Vec<(Bencode, Bencode)>|{
+        println!("len: {}", x.len());
+        /*let temp_vec = 
+        for v in x {
+            
+        }*/
+        Bencode::String("abc".to_string())
+    });
+
+    dict.parse_state(input)
 }
 
 fn take <I> (num: i32) -> SizedBuffer<I> where I: Stream<Item=char> {
@@ -91,7 +110,9 @@ fn main () {
     match str::from_utf8(&file_contents) {
         Ok(v) => println!("file: {}", v),
         Err(e) => panic!("Not a UTF-8 String: {}", e)
-    }
+    };
+
+    let result = parser(bencode_dict).parse("d3:abci4ee");
 }
 
 #[test]
