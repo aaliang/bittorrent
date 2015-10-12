@@ -50,22 +50,14 @@ fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where
 
 fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<Bencode>, I> where I:Stream<Item=char> {
     let (open, close) = (char('l'), char('e'));
-    let bencode_types = parser(bencode_integer).map(Bencode::Int)
-                            .or(parser(bencode_string).map(Bencode::String))
-                            .or(parser(bencode_list).map(Bencode::List))
-                            .or(parser(bencode_dict).map(Bencode::Dict));
-    let list_contents = many::<Vec<Bencode>, _>(bencode_types);
+    let list_contents = many::<Vec<Bencode>, _>(bencode_any());
     let mut list = between(open, close, list_contents);
     list.parse_state(input)
 }
 
 fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> where I:Stream<Item=char> {
     let (open, close) = (char('d'), char('e'));
-    let dict_contents = parser(bencode_integer).map(Bencode::Int)
-                            .or(parser(bencode_string).map(Bencode::String))
-                            .or(parser(bencode_list).map(Bencode::List))
-                            .or(parser(bencode_dict).map(Bencode::Dict));
-    let pairs = (parser(bencode_string), dict_contents);
+    let pairs = (parser(bencode_string), bencode_any());
     let mut dict = between(open, close, many(pairs)).map(|entries:Vec<(String, Bencode)>|{
         let mut hash_map = HashMap::new();
         for (k, v) in entries {
@@ -74,6 +66,16 @@ fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> 
         hash_map
     });
     dict.parse_state(input)
+}
+
+fn bencode_any<I>() -> FnParser<I, fn (State<I>) -> ParseResult<Bencode, I>> where I:Stream<Item=char> {
+    fn bencode_any_<I>(input: State<I>) -> ParseResult<Bencode, I> where I: Stream<Item=char> {
+        parser(bencode_integer).map(Bencode::Int)
+            .or(parser(bencode_string).map(Bencode::String))
+            .or(parser(bencode_list).map(Bencode::List))
+            .or(parser(bencode_dict).map(Bencode::Dict)).parse_state(input)
+    }
+    parser(bencode_any_)
 }
 
 fn take <I> (num: i32) -> SizedBuffer<I> where I: Stream<Item=char> {
