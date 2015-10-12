@@ -6,6 +6,9 @@ authors = ["aliang <aliang2344@gmail.com>"]
 [dependencies]
 combine = "1.0"
 
+[dependencies.bencode]
+path = "src/bencode"
+
 [[bin]]
 name = "server"
 src = "src/server.rs"
@@ -13,10 +16,6 @@ src = "src/server.rs"
 [[bin]]
 name = "client"
 src = "src/client.rs"
-
-[[bin]]
-name = "bencode"
-src = "src/bencode.rs"
 
 [[bin]]
 name = "main"

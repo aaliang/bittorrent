@@ -1,0 +1,12 @@
+[root]
+name = "bencode"
+version = "0.0.1"
+dependencies = [
+ "combine 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "combine"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+

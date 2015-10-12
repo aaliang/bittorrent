@@ -1,0 +1,11 @@
+[package]
+name = "bencode"
+version = "0.0.1"
+authors = ["aliang2344@gmail.com"]
+
+[dependencies]
+"combine" = "1.0"
+
+[lib]
+name = "bencode"
+path = "bencode.rs"
