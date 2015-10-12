@@ -29,7 +29,7 @@ enum Bencode {
     Dict(HashMap<String, Bencode>)
 }
 
-fn bencode_integer<I>(input: State<I>) -> ParseResult<i64, I> where I:Stream<Item=char> {
+fn bencode_integer<I>(input: State<I>) -> ParseResult<i64, I> where I: Stream<Item=char> {
     let (open, close) = (char('i'), char('e'));
     let mut int = between(open, close, many1::<String, _>(digit())).map(|x| {
         x.parse::<i64>().unwrap()
@@ -37,7 +37,7 @@ fn bencode_integer<I>(input: State<I>) -> ParseResult<i64, I> where I:Stream<Ite
     int.parse_state(input)
 }
 
-fn bencode_string<I>(input: State<I>) -> ParseResult<String, I> where I:Stream<Item=char> {
+fn bencode_string<I>(input: State<I>) -> ParseResult<String, I> where I: Stream<Item=char> {
     let (len, input_) = try!(bencode_string_length_prefix(input));
     input_.combine(|input__| take(len).parse_state(input__))
 }
@@ -48,14 +48,14 @@ fn bencode_string_length_prefix<I>(input: State<I>) -> ParseResult<i32, I> where
     get_len.parse_state(input)
 }
 
-fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<Bencode>, I> where I:Stream<Item=char> {
+fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<Bencode>, I> where I: Stream<Item=char> {
     let (open, close) = (char('l'), char('e'));
     let list_contents = many::<Vec<Bencode>, _>(bencode_any());
     let mut list = between(open, close, list_contents);
     list.parse_state(input)
 }
 
-fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> where I:Stream<Item=char> {
+fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> where I: Stream<Item=char> {
     let (open, close) = (char('d'), char('e'));
     let pairs = (parser(bencode_string), bencode_any());
     let mut dict = between(open, close, many(pairs)).map(|entries:Vec<(String, Bencode)>|{
@@ -68,7 +68,7 @@ fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> 
     dict.parse_state(input)
 }
 
-fn bencode_any<I>() -> FnParser<I, fn (State<I>) -> ParseResult<Bencode, I>> where I:Stream<Item=char> {
+fn bencode_any<I>() -> FnParser<I, fn (State<I>) -> ParseResult<Bencode, I>> where I: Stream<Item=char> {
     fn bencode_any_<I>(input: State<I>) -> ParseResult<Bencode, I> where I: Stream<Item=char> {
         parser(bencode_integer).map(Bencode::Int)
             .or(parser(bencode_string).map(Bencode::String))
@@ -110,13 +110,14 @@ impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
 
 fn main () {
     let file_contents = open_file("t-test.torrent");
-
     match str::from_utf8(&file_contents) {
-        Ok(v) => println!("file: {}", v),
+        Ok(v) => {
+            let (result, _) = many::<Vec<Bencode>, _>(bencode_any()).parse(v).unwrap();
+            println!("res: {:?}", result);
+            println!("file: {}", v)
+        },
         Err(e) => panic!("Not a UTF-8 String: {}", e)
     };
-
-    let result = parser(bencode_dict).parse("d3:abci4ee");
 }
 
 
@@ -132,7 +133,6 @@ fn test_string() {
     assert_eq!(result, Ok(("abcde".to_string(), "")));;
 }
 
-
 #[test]
 fn test_list() {
     let homogenous_int_list = parser(bencode_list).parse("li57ei32ee");
@@ -147,5 +147,9 @@ fn test_list() {
 
 #[test]
 fn test_dict() {
-    
+    let (dict_result, _) = parser(bencode_dict).parse("d3:abci4e4:andyli5eee").unwrap();
+    assert_eq!(*dict_result.get("abc").unwrap(), Bencode::Int(4));
+    assert_eq!(*dict_result.get("andy").unwrap(), Bencode::List(vec![Bencode::Int(5)]));
+    assert_eq!(dict_result.len(), 2);
 }
+
