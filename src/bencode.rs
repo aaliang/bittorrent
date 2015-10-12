@@ -1,26 +1,18 @@
-#![allow(unused_imports, unused_must_use, unused_variables, dead_code)]
+//#![allow(unused_imports, unused_must_use, unused_variables, dead_code)]
 
 extern crate combine;
 
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
-use std::str;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use combine::{spaces, parser, between, many, many1, digit, char, any, string, token, Parser, ParserExt, ParseError};
+use std::env;
+use combine::{parser, between, many, many1, digit, char, Parser, ParserExt};
 use combine::primitives::{State, Stream, ParseResult, Consumed};
-use combine::combinator::{Between, Token, FnParser, satisfy};
+use combine::combinator::FnParser;
 
 //my own bencode stuff!
-//
-fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
-    let mut fd = File::open(path).unwrap();
-    let mut buffer:Vec<u8> = Vec::new();
-    fd.read_to_end(&mut buffer);
-    buffer
-}
-
 #[derive(Debug, Eq, PartialEq)]
 enum Bencode {
     Int(i64),
@@ -108,18 +100,35 @@ impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
     }
 }
 
-fn main () {
-    let file_contents = open_file("t-test.torrent");
-    match str::from_utf8(&file_contents) {
-        Ok(v) => {
-            let (result, _) = many::<Vec<Bencode>, _>(bencode_any()).parse(v).unwrap();
-            println!("res: {:?}", result);
-            println!("file: {}", v)
-        },
-        Err(e) => panic!("Not a UTF-8 String: {}", e)
-    };
+fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
+    let mut fd = File::open(path).unwrap();
+    let mut buffer:Vec<u8> = Vec::new();
+    let _ = fd.read_to_end(&mut buffer);
+    buffer
 }
 
+//there's probably an argument that this should be a Result as opposed to an Option, as you
+//could potentially be losing error pertinent information in an Option. not going to change it over
+//right now
+fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
+    //hack to coerce ascii byte values to rust array sliceof char (UTF-8). necessary to avoid substantial
+    //writing of existing combine parser builtins
+    let as_string: Vec<char> = byte_vector.iter().map(|x| *x as char).collect();
+    match many::<Vec<Bencode>, _>(bencode_any()).parse(&as_string[..]) {
+        Ok((result, _)) => Some(result),
+        Err(_) => None
+    }
+}
+
+fn deserialize_file<P: AsRef<Path>>(path: P) -> Option<Vec<Bencode>> {
+    deserialize(open_file(path))
+}
+
+fn main () {
+    let path = env::args().nth(1).unwrap();
+    let cont = deserialize_file(path).unwrap();
+    println!("{:?}", cont);
+}
 
 #[test]
 fn test_integer() {
@@ -153,3 +162,21 @@ fn test_dict() {
     assert_eq!(dict_result.len(), 2);
 }
 
+#[test]
+fn test_many() {
+    let input_string = "i1ei2ei3ei10el3:abc4:defged1:ai10ee";
+    let (result, _) = many::<Vec<Bencode>, _>(bencode_any()).parse(input_string).unwrap();
+    let mut my_map = HashMap::new();
+    my_map.insert("a".to_string(), Bencode::Int(10));
+    assert_eq!(result, vec![
+        Bencode::Int(1),
+        Bencode::Int(2),
+        Bencode::Int(3),
+        Bencode::Int(10),
+        Bencode::List(vec![
+            Bencode::String("abc".to_string()),
+            Bencode::String("defg".to_string())
+            ]),
+        Bencode::Dict(my_map)
+    ]);
+}
