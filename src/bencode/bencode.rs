@@ -19,6 +19,49 @@ pub enum Bencode {
     Dict(HashMap<String, Bencode>)
 }
 
+pub trait BencodeToString {
+    fn to_bencode_string (&self) -> String;
+}
+
+//yes, we could just use the offsets from the parsed file. but we aren't keeping it around, nor
+//are the parsers returning offsets right now (and as it's only needed for computing the
+//hashsum... and computing this on the fly is comparatively easier than navigating through
+//the sigils of combine
+//
+//might be worth adapting at the end as its modular, probably not worth it though)
+impl BencodeToString for Bencode {
+    fn to_bencode_string (&self) -> String {
+        let vec: Vec<String> = match *self { //oh god... what did i do...
+            Bencode::Int(ref int) =>
+                vec!["i".to_string(), int.to_string(), "e".to_string()],
+            Bencode::String(ref string) =>
+                vec![string.len().to_string(), ":".to_string(), string.to_string()],
+            Bencode::List(ref list) => {
+                //borrow checker is yelling at me for an unknown reason... if i use map
+                //let vec: Vec<String> = list.map::<String>(|x:Bencode| x.to_bencode_string());
+                let mut vec = Vec::new();
+                for v in list {
+                    vec.push(v.to_bencode_string());
+                }
+                vec
+            },
+            Bencode::Dict(ref dict) => {
+                let mut vec: Vec<String> = Vec::new();
+                let mut kvs: Vec<(&String, &Bencode)> = dict.iter().collect();
+                kvs.sort_by(|a, b| a.0.cmp(&b.0));
+                vec.push("d".to_string());
+                for (key_name, val) in kvs {
+                    vec.push(key_name.to_string());
+                    vec.push(val.to_bencode_string());
+                }
+                vec.push("e".to_string());
+                vec
+            }
+        };
+        vec.concat()
+    }
+}
+
 /// Opens a file and returns its contents as vector of bytes
 /// throws an exception for now if ENOENT
 pub fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
