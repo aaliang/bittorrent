@@ -19,6 +19,74 @@ pub enum Bencode {
     Dict(HashMap<String, Bencode>)
 }
 
+/// Opens a file and returns its contents as vector of bytes
+/// throws an exception for now if ENOENT
+pub fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
+    let mut fd = File::open(path).unwrap();
+    let mut buffer:Vec<u8> = Vec::new();
+    let _ = fd.read_to_end(&mut buffer);
+    buffer
+}
+
+/// Deserializes a bencoded file
+pub fn deserialize_file<P: AsRef<Path>>(path: P) -> Option<Vec<Bencode>> {
+    deserialize(open_file(path))
+}
+
+/// Takes an input (vector of bytes) and returns the deserialized form as a vector of Bencode(d)
+/// objects. Wrapped in an Option.
+///
+/// there's probably an argument that this should be a Result as opposed to an Option, as you
+/// could potentially be losing error pertinent information in an Option. not going to change it over
+/// right now
+pub fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
+    //hack to coerce ascii byte values to rust array sliceof char (UTF-8). necessary to avoid substantial
+    //writing of existing combine parser builtins
+    let as_string: Vec<char> = byte_vector.iter().map(|x| *x as char).collect();
+    match many::<Vec<Bencode>, _>(bencode_any()).parse(&as_string[..]) {
+        Ok((result, _)) => Some(result),
+        Err(_) => None
+    }
+}
+
+/// Provides typesafe getters for a collection
+pub trait TypedMethods {
+    fn get_int(&self, key: &str) -> Option<i64>;
+    fn get_string(&self, key: &str) -> Option<&String>;
+    fn get_dict(&self, key: &str) -> Option<&HashMap<String, Bencode>>;
+    fn get_list(&self, key: &str) -> Option<&Vec<Bencode>>;
+}
+
+impl TypedMethods for HashMap<String, Bencode> {
+    fn get_int (&self, key: &str) -> Option <i64> {
+        match self.get(key) {
+            Some(&Bencode::Int(a)) => Some(a),
+            _ => None
+        }
+    }
+
+    fn get_string (&self, key: &str) -> Option <&String> {
+        match self.get(key) {
+            Some(&Bencode::String(ref a)) => Some(a),
+            _ => None
+        }
+    }
+
+    fn get_dict (&self, key: &str) -> Option <&HashMap<String, Bencode>> {
+        match self.get(key) {
+            Some(&Bencode::Dict(ref a)) => Some(a),
+            _ => None
+        }
+    }
+
+    fn get_list (&self, key: &str) -> Option <&Vec<Bencode>> {
+        match self.get(key) {
+            Some(&Bencode::List(ref a)) => Some(a),
+            _ => None
+        }
+    }
+}
+
 fn bencode_integer<I>(input: State<I>) -> ParseResult<i64, I> where I: Stream<Item=char> {
     let (open, close) = (char('i'), char('e'));
     let mut int = between(open, close, many1::<String, _>(digit())).map(|x| {
@@ -73,7 +141,7 @@ fn take <I> (num: i32) -> SizedBuffer<I> where I: Stream<Item=char> {
 }
 
 #[derive(Clone)]
-pub struct SizedBuffer <I>(i32, PhantomData<I>);
+struct SizedBuffer <I>(i32, PhantomData<I>);
 impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
     type Input = I;
     type Output = String;
@@ -96,30 +164,6 @@ impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
         }
         Ok((vec_buf.into_iter().collect(), Consumed::Consumed(input)))
     }
-}
-
-pub fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
-    let mut fd = File::open(path).unwrap();
-    let mut buffer:Vec<u8> = Vec::new();
-    let _ = fd.read_to_end(&mut buffer);
-    buffer
-}
-
-//there's probably an argument that this should be a Result as opposed to an Option, as you
-//could potentially be losing error pertinent information in an Option. not going to change it over
-//right now
-pub fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
-    //hack to coerce ascii byte values to rust array sliceof char (UTF-8). necessary to avoid substantial
-    //writing of existing combine parser builtins
-    let as_string: Vec<char> = byte_vector.iter().map(|x| *x as char).collect();
-    match many::<Vec<Bencode>, _>(bencode_any()).parse(&as_string[..]) {
-        Ok((result, _)) => Some(result),
-        Err(_) => None
-    }
-}
-
-pub fn deserialize_file<P: AsRef<Path>>(path: P) -> Option<Vec<Bencode>> {
-    deserialize(open_file(path))
 }
 
 #[test]

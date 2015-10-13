@@ -2,7 +2,7 @@ extern crate bencode;
 
 use std::env;
 use std::collections::HashMap;
-use bencode::{deserialize_file, Bencode};
+use bencode::{deserialize_file, Bencode, TypedMethods};
 
 #[derive(Debug)]
 struct Metadata {
@@ -11,10 +11,6 @@ struct Metadata {
 
 trait MetadataDict {
     fn to_metadata (&self) -> Option<Metadata>;
-    fn get_int(&self, key: &str) -> Option<i64>;
-    fn get_string(&self, key: &str) -> Option<&String>;
-    fn get_dict(&self, key: &str) -> Option<&HashMap<String, Bencode>>;
-    fn get_list(&self, key: &str) -> Option<&Vec<Bencode>>;
 }
 
 impl MetadataDict for HashMap<String, Bencode> {
@@ -25,34 +21,6 @@ impl MetadataDict for HashMap<String, Bencode> {
         Some(Metadata {
             announce: announce.clone(),
         })
-    }
-
-    fn get_int (&self, key: &str) -> Option <i64> {
-        match self.get(key) {
-            Some(&Bencode::Int(a)) => Some(a),
-            _ => None
-        }
-    }
-
-    fn get_string (&self, key: &str) -> Option <&String> {
-        match self.get(key) {
-            Some(&Bencode::String(ref a)) => Some(a),
-            _ => None
-        }
-    }
-
-    fn get_dict (&self, key: &str) -> Option <&HashMap<String, Bencode>> {
-        match self.get(key) {
-            Some(&Bencode::Dict(ref a)) => Some(a),
-            _ => None
-        }
-    }
-
-    fn get_list (&self, key: &str) -> Option <&Vec<Bencode>> {
-        match self.get(key) {
-            Some(&Bencode::List(ref a)) => Some(a),
-            _ => None
-        }
     }
 }
 
