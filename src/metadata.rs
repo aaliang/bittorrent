@@ -38,6 +38,16 @@ pub struct Metadata {
     mode_info: FileMode,
 }
 
+impl Metadata {
+    pub fn get_total_length (&self) -> u32 {
+        let len = match self.mode_info {
+            FileMode::SingleFile(ref sf) => sf.length,
+            FileMode::MultiFile(ref mf) => mf.files.iter().fold(0, |a:i64, b:&FileInfo| a + b.length)
+        };
+        len as u32
+    }
+}
+
 pub trait MetadataDict {
     fn to_metadata (&self) -> Option<Metadata>;
 }

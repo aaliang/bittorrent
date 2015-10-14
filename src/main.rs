@@ -6,7 +6,7 @@ use std::env;
 use bencode::{deserialize_file, Bencode};
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
-use bittorrent::metadata::{MetadataDict, Metadata};
+use bittorrent::metadata::{MetadataDict, Metadata, FileMode};
 
 const PEER_ID_LENGTH:usize = 20;
 const PEER_ID_PREFIX:&'static str = "ABT:";
@@ -20,14 +20,16 @@ fn gen_rand_peer_id (prefix: &str) -> String {
     prefix.to_string() + &rand
 }
 
-fn init (metadata: Metadata, listen_port: u32) {
+fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
+    let bytes_left = metadata.get_total_length() - bytes_dled;
     let req_params = QueryString::from(vec![
                                            ("info_hash", metadata.info_hash),
                                            ("peer_id", peer_id),
                                            ("port", listen_port.to_string()),
                                            ("uploaded", 0.to_string()),
-                                           ("downloaded", 0.to_string())
+                                           ("downloaded", bytes_dled.to_string()),
+                                           ("left", bytes_left.to_string())
                                            ]).query_string();
     println!("params: {}", req_params);
 }
@@ -47,5 +49,5 @@ fn main () {
 
     println!("{:?}", metadata);
 
-    init(metadata, 6888);
+    init(metadata, 6888, 0);
 }
