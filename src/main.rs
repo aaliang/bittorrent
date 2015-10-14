@@ -1,11 +1,26 @@
 extern crate bencode;
 extern crate crypto;
+extern crate rand;
 
 use std::env;
 use std::collections::HashMap;
 use bencode::{deserialize_file, Bencode, TypedMethods, BencodeToString};
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
+use rand::{random, Rng};
+
+const PEER_ID_LENGTH:usize = 20;
+const PEER_ID_PREFIX:&'static str = "ABT:";
+
+fn gen_rand_peer_id (prefix: &str) -> String {
+    let rand_length = PEER_ID_LENGTH - prefix.len();
+    let rand = rand::thread_rng()
+        .gen_ascii_chars()
+        .take(rand_length)
+        .collect::<String>();
+
+    prefix.to_string() + &rand
+}
 
 #[derive(Debug)]
 struct Metadata {
@@ -24,8 +39,8 @@ impl MetadataDict for HashMap<String, Bencode> {
         let announce = self.get_string("announce").unwrap();
         let info_raw = self.get("info").unwrap().to_bencode_string();
         let mut sha = Sha1::new();
-        sha.input_str(&info_raw);
 
+        sha.input_str(&info_raw);
         let info_hash = sha.result_str();
         Some(Metadata {
             announce: announce.clone(),
@@ -34,7 +49,7 @@ impl MetadataDict for HashMap<String, Bencode> {
     }
 }
 
-fn connect_to_tracker(announce: String) {
+fn get_tracker_response_sync (announce: String) {
 
 }
 
@@ -45,6 +60,9 @@ fn main () {
         Some(&Bencode::Dict(ref x)) => x.to_metadata(),
         _ => panic!("no valid information in torrent file")
     }.unwrap();
+
+    let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
+    println!("{}", peer_id);
 
     println!("{:?}", metadata);
 }

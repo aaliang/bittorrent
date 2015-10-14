@@ -6,6 +6,7 @@ authors = ["aliang <aliang2344@gmail.com>"]
 [dependencies]
 combine = "1.0"
 rust-crypto = "0.2"
+rand = "0.3"
 
 [dependencies.bencode]
 path = "src/bencode"
