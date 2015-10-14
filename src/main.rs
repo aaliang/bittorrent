@@ -1,6 +1,7 @@
 extern crate bencode;
 extern crate crypto;
 extern crate rand;
+extern crate url;
 
 use std::env;
 use std::collections::HashMap;
@@ -8,6 +9,7 @@ use bencode::{deserialize_file, Bencode, TypedMethods, BencodeToString};
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
 use rand::{random, Rng};
+use url::percent_encoding::{utf8_percent_encode, DEFAULT_ENCODE_SET};
 
 const PEER_ID_LENGTH:usize = 20;
 const PEER_ID_PREFIX:&'static str = "ABT:";
@@ -53,6 +55,32 @@ fn get_tracker_response_sync (announce: String) {
 
 }
 
+struct TrackerRequest <'a> {
+    params: HashMap<&'a str, String>
+}
+
+impl <'a> TrackerRequest <'a> {
+    fn new () -> TrackerRequest <'a> {
+        TrackerRequest {params: HashMap::new()}
+    }
+
+    fn from_params (params: Vec<(&'a str, String)>) -> TrackerRequest <'a> {
+        let mut hm = TrackerRequest::new();
+        hm.add_params(params);
+        hm
+    }
+
+    fn add_param (&mut self, name: &'a str, val: String) {
+        self.params.insert(name, utf8_percent_encode(&val, DEFAULT_ENCODE_SET));
+    }
+
+    fn add_params (&mut self, params: Vec<(&'a str, String)>) {
+        for (key, val) in params {
+            self.params.insert(key, utf8_percent_encode(&val, DEFAULT_ENCODE_SET));
+        }
+    }
+}
+
 fn main () {
     let path = env::args().nth(1).unwrap_or_else(||panic!("no path to torrent provided"));
     let content = deserialize_file(path).unwrap_or_else(||panic!("unable to parse bencoded metadata"));
@@ -62,7 +90,10 @@ fn main () {
     }.unwrap();
 
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
-    println!("{}", peer_id);
 
-    println!("{:?}", metadata);
+    let mut req_params = TrackerRequest::from_params(vec![
+                                                     ("info_hash", metadata.info_hash),
+                                                     ("peer_id", peer_id)
+                                                     ]);
+
 }
