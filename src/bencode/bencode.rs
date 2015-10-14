@@ -11,7 +11,7 @@ use combine::primitives::{State, Stream, ParseResult, Consumed};
 use combine::combinator::FnParser;
 
 //my own bencode stuff!
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Bencode {
     Int(i64),
     String(String),
@@ -96,6 +96,7 @@ pub fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
 pub trait TypedMethods {
     fn get_int(&self, key: &str) -> Option<i64>;
     fn get_string(&self, key: &str) -> Option<&String>;
+    fn get_owned_string(&self, key: &str) -> Option<String>;
     fn get_dict(&self, key: &str) -> Option<&HashMap<String, Bencode>>;
     fn get_list(&self, key: &str) -> Option<&Vec<Bencode>>;
 }
@@ -111,6 +112,13 @@ impl TypedMethods for HashMap<String, Bencode> {
     fn get_string (&self, key: &str) -> Option <&String> {
         match self.get(key) {
             Some(&Bencode::String(ref a)) => Some(a),
+            _ => None
+        }
+    }
+
+    fn get_owned_string(&self, key: &str) -> Option <String> {
+        match self.get(key) {
+            Some(&Bencode::String(ref a)) => Some(a.to_owned()),
             _ => None
         }
     }

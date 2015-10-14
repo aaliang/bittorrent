@@ -4,6 +4,7 @@ use url::percent_encoding::{utf8_percent_encode, DEFAULT_ENCODE_SET};
 //generic query string builder, automatically escapes each parameter val if necessary
 //KEYS ARE TAKEN AS IS
 
+#[derive(Debug)]
 pub struct QueryString<'a> {
     params: HashMap<&'a str, String>
 }
@@ -22,7 +23,7 @@ impl <'a> QueryString<'a> {
         }
     }
 
-    pub fn to_param_string (&self) -> String {
+    pub fn query_string (&self) -> String {
         self.params.iter().map(|(k, v)| k.to_string() + "=" + v)
                           .collect::<Vec<String>>()
                           .join("&")
