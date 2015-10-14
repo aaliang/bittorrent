@@ -3,6 +3,8 @@ extern crate crypto;
 extern crate rand;
 extern crate url;
 
+mod querystring;
+
 use std::env;
 use std::collections::HashMap;
 use bencode::{deserialize_file, Bencode, TypedMethods, BencodeToString};
@@ -10,6 +12,8 @@ use crypto::sha1::Sha1;
 use crypto::digest::Digest;
 use rand::{random, Rng};
 use url::percent_encoding::{utf8_percent_encode, DEFAULT_ENCODE_SET};
+
+use querystring::QueryString;
 
 const PEER_ID_LENGTH:usize = 20;
 const PEER_ID_PREFIX:&'static str = "ABT:";
@@ -55,30 +59,11 @@ fn get_tracker_response_sync (announce: String) {
 
 }
 
-struct TrackerRequest <'a> {
-    params: HashMap<&'a str, String>
-}
-
-impl <'a> TrackerRequest <'a> {
-    fn new () -> TrackerRequest <'a> {
-        TrackerRequest {params: HashMap::new()}
-    }
-
-    fn from_params (params: Vec<(&'a str, String)>) -> TrackerRequest <'a> {
-        let mut hm = TrackerRequest::new();
-        hm.add_params(params);
-        hm
-    }
-
-    fn add_param (&mut self, name: &'a str, val: String) {
-        self.params.insert(name, utf8_percent_encode(&val, DEFAULT_ENCODE_SET));
-    }
-
-    fn add_params (&mut self, params: Vec<(&'a str, String)>) {
-        for (key, val) in params {
-            self.params.insert(key, utf8_percent_encode(&val, DEFAULT_ENCODE_SET));
-        }
-    }
+fn init (metadata: Metadata) {
+    let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
+    let mut req_params = QueryString::from(vec![
+                                              ("info_hash", metadata.info_hash),
+                                              ("peer_id", peer_id)]);
 }
 
 fn main () {
@@ -91,9 +76,11 @@ fn main () {
 
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
 
-    let mut req_params = TrackerRequest::from_params(vec![
-                                                     ("info_hash", metadata.info_hash),
-                                                     ("peer_id", peer_id)
-                                                     ]);
+    let req_params = QueryString::from(vec![
+                                       ("info_hash", metadata.info_hash),
+                                       ("peer_id", peer_id)
+                                       ]).to_param_string();
+
+    println!("params: {}", req_params);
 
 }
