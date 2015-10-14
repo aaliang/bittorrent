@@ -1,4 +1,3 @@
-extern crate combine;
 extern crate bencode;
 extern crate url;
 extern crate crypto;

@@ -31,7 +31,7 @@ pub enum FileMode {
 
 #[derive(Debug, Clone)]
 pub struct Metadata {
-    announce: String,
+    pub announce: String,
     pub info_hash: String,
     piece_length: i64,
     pieces: String,

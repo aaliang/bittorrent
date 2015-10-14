@@ -19,14 +19,16 @@ impl <'a> QueryString<'a> {
 
     pub fn add_params (&mut self, params: Vec<(&'a str, String)>) {
         for (key, val) in params {
-            self.params.insert(key, utf8_percent_encode(&val, DEFAULT_ENCODE_SET));
+            self.params.insert(key, val);
         }
     }
 
     pub fn query_string (&self) -> String {
-        self.params.iter().map(|(k, v)| k.to_string() + "=" + v)
+
+        let qstring = self.params.iter().map(|(k, v)| k.to_string() + "=" + v)
                           .collect::<Vec<String>>()
-                          .join("&")
+                          .join("&");
+        utf8_percent_encode(&qstring, DEFAULT_ENCODE_SET)
     }
 
 }

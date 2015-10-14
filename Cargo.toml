@@ -4,10 +4,10 @@ version = "0.1.0"
 authors = ["aliang <aliang2344@gmail.com>"]
 
 [dependencies]
-combine = "1.0"
 rust-crypto = "0.2"
 rand = "0.3"
 url = "0.2"
+hyper = "0.6"
 
 [dependencies.bencode]
 path = "src/bencode"
