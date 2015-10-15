@@ -19,6 +19,24 @@ pub enum Bencode {
     Dict(HashMap<String, Bencode>)
 }
 
+//for options over Bencode Shapes
+pub trait BencodeVecOption {
+    /// Unwraps self if it wraps a dictionary
+    fn to_singleton_dict (&self) -> Option<HashMap<String, Bencode>>;
+}
+
+impl BencodeVecOption for Option<Vec<Bencode>> {
+    fn to_singleton_dict (&self) -> Option <HashMap<String, Bencode>> {
+        match self {
+            &Some(ref a) => match (a.first(), a.len()) {
+                (Some(&Bencode::Dict(ref b)), 1) => Some(b.to_owned()),
+                _ => None
+            },
+            _ => None
+        }
+    }
+}
+
 pub trait BencodeToString {
     fn to_bencode_string (&self) -> String;
 }

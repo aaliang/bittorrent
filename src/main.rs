@@ -6,7 +6,7 @@ extern crate hyper;
 use std::env;
 use std::io::Read;
 use std::collections::HashMap;
-use bencode::{deserialize, deserialize_file, Bencode, TypedMethods};
+use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOption};
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
 use bittorrent::metadata::{MetadataDict, Metadata};
@@ -37,13 +37,7 @@ fn ping_tracker (announce: String, args: Vec<(&str, String)>) -> Option<HashMap<
     println!("dict: {:?}", body.iter().map(|a| *a as char).collect::<Vec<char>>());
     println!("{}", body.iter().map(|a| *a as char).collect::<String>());
 
-    match deserialize(body) {
-        Some(a) => match a.first() {
-            Some(&Bencode::Dict(ref a)) => Some(a.to_owned()),
-            _ => None
-        },
-        _ => None
-    }
+    deserialize(body).to_singleton_dict()
 }
 
 fn get_peers <T> (tracker_response: &T) -> Vec<(String, u32)> where T:TypedMethods {
