@@ -5,6 +5,7 @@ extern crate hyper;
 
 use std::env;
 use std::io::Read;
+use std::collections::HashMap;
 use bencode::{deserialize, deserialize_file, Bencode, TypedMethods};
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
@@ -24,38 +25,47 @@ fn gen_rand_peer_id (prefix: &str) -> String {
     prefix.to_string() + &rand
 }
 
-fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
-    let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
-    let bytes_left = metadata.get_total_length() - bytes_dled;
-    let req_addr = metadata.announce + "?" + &QueryString::from(vec![
-                                                                ("info_hash", metadata.info_hash),
-                                                                ("peer_id", peer_id),
-                                                                ("port", listen_port.to_string()),
-                                                                ("uploaded", 0.to_string()),
-                                                                ("downloaded", bytes_dled.to_string()),
-                                                                ("left", bytes_left.to_string()),
-                                                                ("compact", 1.to_string()),
-                                                                ("event", "started".to_string())
-                                                                ]).query_string();
-
-    //println!("{}", req_addr);
-
+fn ping_tracker (announce: String, args: Vec<(&str, String)>) -> Option<HashMap<String, Bencode>> {
+    let req_addr = announce + "?" + &QueryString::from(args).query_string();
     let client = Client::new();
     let mut res = client.get(&req_addr)
                         .header(Connection::close())
                         .send().unwrap();
-
     let mut body = Vec::new();
     res.read_to_end(&mut body).unwrap();
 
     println!("dict: {:?}", body.iter().map(|a| *a as char).collect::<Vec<char>>());
-
     println!("{}", body.iter().map(|a| *a as char).collect::<String>());
-    let tracker_response = deserialize(body).unwrap();
-    let tracker_resp = match tracker_response.first() {
-        Some(&Bencode::Dict(ref a)) => a,
-        _ => panic!("unable to parse dictionary from tracker response!")
+
+    match deserialize(body) {
+        Some(a) => match a.first() {
+            Some(&Bencode::Dict(ref a)) => Some(a.to_owned()),
+            _ => None
+        },
+        _ => None
+    }
+}
+
+fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
+    let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
+    let bytes_left = metadata.get_total_length() - bytes_dled;
+
+    let response = ping_tracker(metadata.announce, vec![
+                                ("info_hash", metadata.info_hash),
+                                ("peer_id", peer_id),
+                                ("port", listen_port.to_string()),
+                                ("uploaded", 0.to_string()),
+                                ("downloaded", bytes_dled.to_string()),
+                                ("left", bytes_left.to_string()),
+                                ("compact", 1.to_string()),
+                                ("event", "started".to_string())
+                                ]);
+
+    let tracker_resp = match response {
+        Some(a) => a,
+        None => panic!("no valid bencode response from tracker")
     };
+
     let peers = tracker_resp.get_owned_string("peers").unwrap();
     let peers6 = tracker_resp.get_owned_string("peers6").unwrap();
 
@@ -73,7 +83,6 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     }).collect::<Vec<(String, u32)>>();
 
     println!("{:?}", addresses);
-    println!("Response: {:?}", tracker_response);
 }
 
 fn main () {

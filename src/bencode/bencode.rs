@@ -87,7 +87,7 @@ pub fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
     //writing of existing combine parser builtins
     let as_string: Vec<char> = byte_vector.iter().map(|x| *x as char).collect();
     match many::<Vec<Bencode>, _>(bencode_any()).parse(&as_string[..]) {
-        Ok((result, s)) => Some(result),
+        Ok((result, _)) => Some(result),
         Err(_) => None
     }
 }
