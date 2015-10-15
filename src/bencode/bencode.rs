@@ -37,13 +37,7 @@ impl BencodeToString for Bencode {
             Bencode::String(ref string) =>
                 vec![string.len().to_string(), ":".to_string(), string.to_string()],
             Bencode::List(ref list) => {
-                //borrow checker is yelling at me for an unknown reason... if i use map
-                //let vec: Vec<String> = list.map::<String>(|x:Bencode| x.to_bencode_string());
-                let mut vec = Vec::new();
-                for v in list {
-                    vec.push(v.to_bencode_string());
-                }
-                vec
+                list.iter().map(|x| x.to_bencode_string()).collect::<Vec<String>>()
             },
             Bencode::Dict(ref dict) => {
                 let mut vec: Vec<String> = Vec::new();
