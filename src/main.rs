@@ -6,6 +6,7 @@ extern crate hyper;
 use std::env;
 use std::io::Read;
 use std::collections::HashMap;
+use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
 use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOption};
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
@@ -15,6 +16,11 @@ use hyper::header::Connection;
 
 const PEER_ID_LENGTH:usize = 20;
 const PEER_ID_PREFIX:&'static str = "ABT:";
+
+#[derive(Debug)]
+enum Address {
+    TCP(Ipv4Addr, u16)
+}
 
 fn gen_rand_peer_id (prefix: &str) -> String {
     let rand_length = PEER_ID_LENGTH - prefix.len();
@@ -34,28 +40,39 @@ fn ping_tracker (announce: String, args: Vec<(&str, String)>) -> Option<HashMap<
     let mut body = Vec::new();
     res.read_to_end(&mut body).unwrap();
 
-    println!("dict: {:?}", body.iter().map(|a| *a as char).collect::<Vec<char>>());
-    println!("{}", body.iter().map(|a| *a as char).collect::<String>());
-
     deserialize(body).to_singleton_dict()
 }
 
-fn get_peers <T> (tracker_response: &T) -> Vec<(String, u32)> where T:TypedMethods {
+fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
     let peers = tracker_response.get_owned_string("peers").unwrap();
     //for now keep the bottom unused value, it's for ipv6. which maybe will be addressed
     let peers6 = tracker_response.get_owned_string("peers6").unwrap();
     let peers_bytes = peers.chars().map(|x| x as u8).collect::<Vec<u8>>();
-
+    assert!(peers_bytes.len() % 6 == 0);
     (0..peers_bytes.len()/6).map(|x| {
         let ip_start = x * 6;
         let ip_end = ip_start + 4;
-        //returns a 2-ple of addresses (as string) and port (as u32)
-        ((&peers_bytes[ip_start..ip_end]).iter()
-                                            .map(|y| y.to_string())
-                                            .collect::<Vec<String>>()
-                                            .join("."),
-            peers_bytes[ip_end] as u32 + peers_bytes[ip_end+1] as u32)
-    }).collect::<Vec<(String, u32)>>()
+        let ip_bytes = &peers_bytes[ip_start..ip_end];
+        let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+        /*let ip = (&peers_bytes[ip_start..ip_end]).iter()
+                                                 .map(|y| y.to_string())
+                                                 .collect::<Vec<String>>()
+                                                 .join(".");*/
+        let port = (peers_bytes[ip_end] as u16)*256 + peers_bytes[ip_end+1] as u16;
+        Address::TCP(ip, port)
+    }).collect::<Vec<Address>>()
+}
+
+fn connect_to_peer(address:Address) {
+    let (ip, port) = match address {
+        Address::TCP(ip_address, port) => (ip_address, port)
+    };
+
+    let stream = match TcpStream::connect(SocketAddrV4::new(ip, port)) {
+        Ok(tcp_stream) => tcp_stream,
+        _ => panic!("unable to connect to socket")
+    };
+
 }
 
 fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
@@ -80,7 +97,9 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
 
     let peers = get_peers(&tracker_resp);
 
-    println!("{:?}", peers);
+    for peer in peers {
+        connect_to_peer(peer);
+    }
 }
 
 fn main () {
