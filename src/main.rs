@@ -46,6 +46,24 @@ fn ping_tracker (announce: String, args: Vec<(&str, String)>) -> Option<HashMap<
     }
 }
 
+fn get_peers <T> (tracker_response: &T) -> Vec<(String, u32)> where T:TypedMethods {
+    let peers = tracker_response.get_owned_string("peers").unwrap();
+    //for now keep the bottom unused value, it's for ipv6. which maybe will be addressed
+    let peers6 = tracker_response.get_owned_string("peers6").unwrap();
+    let peers_bytes = peers.chars().map(|x| x as u8).collect::<Vec<u8>>();
+
+    (0..peers_bytes.len()/6).map(|x| {
+        let ip_start = x * 6;
+        let ip_end = ip_start + 4;
+        //returns a 2-ple of addresses (as string) and port (as u32)
+        ((&peers_bytes[ip_start..ip_end]).iter()
+                                            .map(|y| y.to_string())
+                                            .collect::<Vec<String>>()
+                                            .join("."),
+            peers_bytes[ip_end] as u32 + peers_bytes[ip_end+1] as u32)
+    }).collect::<Vec<(String, u32)>>()
+}
+
 fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let bytes_left = metadata.get_total_length() - bytes_dled;
@@ -66,23 +84,9 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
         None => panic!("no valid bencode response from tracker")
     };
 
-    let peers = tracker_resp.get_owned_string("peers").unwrap();
-    let peers6 = tracker_resp.get_owned_string("peers6").unwrap();
+    let peers = get_peers(&tracker_resp);
 
-    let peers_bytes = peers.chars().map(|x| x as u8).collect::<Vec<u8>>();
-
-    let addresses = (0..peers_bytes.len()/6).map(|x| {
-        let ip_start = x * 6;
-        let ip_end = ip_start + 4;
-        //returns a 2-ple of addresses (as string) and port (as u32)
-        ((&peers_bytes[ip_start..ip_end]).iter()
-                                            .map(|y| y.to_string())
-                                            .collect::<Vec<String>>()
-                                            .join("."),
-            peers_bytes[ip_end] as u32 + peers_bytes[ip_end+1] as u32)
-    }).collect::<Vec<(String, u32)>>();
-
-    println!("{:?}", addresses);
+    println!("{:?}", peers);
 }
 
 fn main () {
