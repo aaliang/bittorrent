@@ -54,16 +54,32 @@ fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
         let ip_end = ip_start + 4;
         let ip_bytes = &peers_bytes[ip_start..ip_end];
         let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
-        /*let ip = (&peers_bytes[ip_start..ip_end]).iter()
-                                                 .map(|y| y.to_string())
-                                                 .collect::<Vec<String>>()
-                                                 .join(".");*/
         let port = (peers_bytes[ip_end] as u16)*256 + peers_bytes[ip_end+1] as u16;
         Address::TCP(ip, port)
     }).collect::<Vec<Address>>()
 }
 
+/// The peer handshake message, according to protocol
+///
+fn to_handshake (pstr:&str, info_hash: &String, peer_id: &String) -> Vec<u8> {
+    let reserved:[u8; 8] = [0; 8];
+    let pstr_bytes = pstr.to_string().into_bytes();
+    let a = [pstr_bytes.len() as u8];
+    let b = pstr_bytes;
+    let c = reserved;
+    let d = info_hash.clone().into_bytes();
+    let e = peer_id.clone().into_bytes();
+
+    [a.iter(),
+     b.iter(),
+     c.iter(),
+     d.iter(),
+     e.iter()].iter().flat_map(|y| y.to_owned().map(|x| *x).collect::<Vec<u8>>())
+                    .collect::<Vec<u8>>()
+}
+
 fn connect_to_peer(address:Address) {
+    println!("connecting to {:?}", address);
     let (ip, port) = match address {
         Address::TCP(ip_address, port) => (ip_address, port)
     };
@@ -72,6 +88,7 @@ fn connect_to_peer(address:Address) {
         Ok(tcp_stream) => tcp_stream,
         _ => panic!("unable to connect to socket")
     };
+    println!("connected to {:?}", address);
 
 }
 
@@ -80,8 +97,8 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     let bytes_left = metadata.get_total_length() - bytes_dled;
 
     let response = ping_tracker(metadata.announce, vec![
-                                ("info_hash", metadata.info_hash),
-                                ("peer_id", peer_id),
+                                ("info_hash", metadata.info_hash.clone()),
+                                ("peer_id", peer_id.clone()),
                                 ("port", listen_port.to_string()),
                                 ("uploaded", 0.to_string()),
                                 ("downloaded", bytes_dled.to_string()),
@@ -96,6 +113,7 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     };
 
     let peers = get_peers(&tracker_resp);
+    to_handshake("BitTorrent protocol", &metadata.info_hash, &peer_id);
 
     for peer in peers {
         connect_to_peer(peer);
