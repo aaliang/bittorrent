@@ -64,19 +64,15 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     let addresses = (0..peers_bytes.len()/6).map(|x| {
         let ip_start = x * 6;
         let ip_end = ip_start + 4;
-        (&peers_bytes[ip_start..ip_end], peers_bytes[ip_end] as u32 + peers_bytes[ip_end+1] as u32)
-    }).collect::<Vec<(&[u8], u32)>>();
+        //returns a 2-ple of addresses (as string) and port (as u32)
+        ((&peers_bytes[ip_start..ip_end]).iter()
+                                            .map(|y| y.to_string())
+                                            .collect::<Vec<String>>()
+                                            .join("."),
+            peers_bytes[ip_end] as u32 + peers_bytes[ip_end+1] as u32)
+    }).collect::<Vec<(String, u32)>>();
 
-    println!("y: {:?}", addresses);
-    println!("peers: {:?}, len: {}", peers_bytes, peers_bytes.len());
-
-    /*for item in peers.chars() {
-        println!("{} - {}", item);
-    }*/
-
-    let peers6_bytes = peers6.chars().map(|x| x as u8).collect::<Vec<u8>>();
-    println!("peers6: {:?}, len: {}", peers6_bytes, peers6_bytes.len());
-
+    println!("{:?}", addresses);
     println!("Response: {:?}", tracker_response);
 }
 
