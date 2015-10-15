@@ -5,7 +5,7 @@ extern crate hyper;
 
 use std::env;
 use std::io::Read;
-use bencode::{deserialize_file, Bencode};
+use bencode::{deserialize, deserialize_file, Bencode, TypedMethods};
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
 use bittorrent::metadata::{MetadataDict, Metadata};
@@ -38,7 +38,9 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
                                                                 ("event", "started".to_string())
                                                                 ]).query_string();
 
-    let mut client = Client::new();
+    //println!("{}", req_addr);
+
+    let client = Client::new();
     let mut res = client.get(&req_addr)
                         .header(Connection::close())
                         .send().unwrap();
@@ -46,8 +48,36 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     let mut body = Vec::new();
     res.read_to_end(&mut body).unwrap();
 
+    println!("dict: {:?}", body.iter().map(|a| *a as char).collect::<Vec<char>>());
 
-    println!("Response: {:?}", body.iter().map(|x| *x as char).collect::<String>());
+    println!("{}", body.iter().map(|a| *a as char).collect::<String>());
+    let tracker_response = deserialize(body).unwrap();
+    let tracker_resp = match tracker_response.first() {
+        Some(&Bencode::Dict(ref a)) => a,
+        _ => panic!("unable to parse dictionary from tracker response!")
+    };
+    let peers = tracker_resp.get_owned_string("peers").unwrap();
+    let peers6 = tracker_resp.get_owned_string("peers6").unwrap();
+
+    let peers_bytes = peers.chars().map(|x| x as u8).collect::<Vec<u8>>();
+
+    let addresses = (0..peers_bytes.len()/6).map(|x| {
+        let ip_start = x * 6;
+        let ip_end = ip_start + 4;
+        (&peers_bytes[ip_start..ip_end], peers_bytes[ip_end] as u32 + peers_bytes[ip_end+1] as u32)
+    }).collect::<Vec<(&[u8], u32)>>();
+
+    println!("y: {:?}", addresses);
+    println!("peers: {:?}, len: {}", peers_bytes, peers_bytes.len());
+
+    /*for item in peers.chars() {
+        println!("{} - {}", item);
+    }*/
+
+    let peers6_bytes = peers6.chars().map(|x| x as u8).collect::<Vec<u8>>();
+    println!("peers6: {:?}, len: {}", peers6_bytes, peers6_bytes.len());
+
+    println!("Response: {:?}", tracker_response);
 }
 
 fn main () {
@@ -62,6 +92,5 @@ fn main () {
     }.unwrap();
 
     //println!("{:?}", metadata);
-
     init(metadata, 6888, 0);
 }
