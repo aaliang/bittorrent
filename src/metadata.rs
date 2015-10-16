@@ -32,7 +32,7 @@ pub enum FileMode {
 #[derive(Debug, Clone)]
 pub struct Metadata {
     pub announce: String,
-    pub info_hash: String,
+    pub info_hash: [u8; 20],
     piece_length: i64,
     pieces: String,
     mode_info: FileMode,
@@ -59,13 +59,14 @@ impl MetadataDict for HashMap<String, Bencode> {
         let announce = self.get_string("announce").unwrap();
         let info_dict = self.get_dict("info").unwrap().to_owned();
         let mut sha = Sha1::new();
-
         sha.input_str(&Bencode::Dict(info_dict.clone()).to_bencode_string());
+        let mut info_hash:[u8; 20] = [0; 20];
+        let result = sha.result(&mut info_hash);
 
         //for now only handle single file mode
         Some(Metadata {
             announce: announce.clone(),
-            info_hash: sha.result_str().to_string(),
+            info_hash: info_hash,
             piece_length: info_dict.get_int("piece length").unwrap(),
             pieces: info_dict.get_string("pieces").unwrap().to_string(),
             mode_info: FileMode::SingleFile(SingleFileInfo {

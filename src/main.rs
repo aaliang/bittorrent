@@ -4,7 +4,7 @@ extern crate bittorrent;
 extern crate hyper;
 
 use std::env;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
 use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOption};
@@ -31,8 +31,8 @@ fn gen_rand_peer_id (prefix: &str) -> String {
     prefix.to_string() + &rand
 }
 
-fn ping_tracker (announce: String, args: Vec<(&str, String)>) -> Option<HashMap<String, Bencode>> {
-    let req_addr = announce + "?" + &QueryString::from(args).query_string();
+fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap<String, Bencode>> {
+    let req_addr = announce.to_string() + "?" + &QueryString::from(args).query_string();
     let client = Client::new();
     let mut res = client.get(&req_addr)
                         .header(Connection::close())
@@ -61,43 +61,64 @@ fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
 
 /// The peer handshake message, according to protocol
 ///
-fn to_handshake (pstr:&str, info_hash: &String, peer_id: &String) -> Vec<u8> {
+fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
     let reserved:[u8; 8] = [0; 8];
     let pstr_bytes = pstr.to_string().into_bytes();
     let a = [pstr_bytes.len() as u8];
     let b = pstr_bytes;
     let c = reserved;
-    let d = info_hash.clone().into_bytes();
+
+    //println!("info_hash: {}", info_hash);
+    println!("peer_id: {}", peer_id);
+    let d = info_hash.clone();
     let e = peer_id.clone().into_bytes();
 
-    [a.iter(),
+    let hs = [a.iter(),
      b.iter(),
      c.iter(),
      d.iter(),
-     e.iter()].iter().flat_map(|y| y.to_owned().map(|x| *x).collect::<Vec<u8>>())
-                    .collect::<Vec<u8>>()
+     e.iter()].iter().flat_map(|y| {
+         println!("{:?}", y.to_owned().collect::<Vec<&u8>>());
+         y.to_owned()
+                                    .map(|x| *x)
+                                    .collect::<Vec<u8>>()
+     }).collect::<Vec<u8>>();
+
+    println!("hs.len(): {}", hs.len());
+    hs
 }
 
-fn connect_to_peer(address:Address) {
+fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
     println!("connecting to {:?}", address);
     let (ip, port) = match address {
         Address::TCP(ip_address, port) => (ip_address, port)
     };
 
-    let stream = match TcpStream::connect(SocketAddrV4::new(ip, port)) {
+    let mut stream = match TcpStream::connect(SocketAddrV4::new(ip, port)) {
         Ok(tcp_stream) => tcp_stream,
         _ => panic!("unable to connect to socket")
     };
+
     println!("connected to {:?}", address);
 
+    let _ = stream.write(&to_handshake("BitTorrent protocol", &metadata.info_hash, peer_id));
+
+    let mut buffer = Vec::new();
+    match stream.read_to_end(&mut buffer) {
+        Ok(bytes_read) => println!("bytes consumed: {}", bytes_read),
+        Err(a) => println!("{}", a)
+    }
+
+    println!("res: {:?}", buffer);
 }
 
 fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let bytes_left = metadata.get_total_length() - bytes_dled;
 
-    let response = ping_tracker(metadata.announce, vec![
-                                ("info_hash", metadata.info_hash.clone()),
+    let info_hash:String = metadata.info_hash.iter().map(|x| *x as char).collect();
+    let response = ping_tracker(&metadata.announce, vec![
+                                ("info_hash", info_hash),
                                 ("peer_id", peer_id.clone()),
                                 ("port", listen_port.to_string()),
                                 ("uploaded", 0.to_string()),
@@ -113,10 +134,9 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     };
 
     let peers = get_peers(&tracker_resp);
-    to_handshake("BitTorrent protocol", &metadata.info_hash, &peer_id);
-
+    let handshake_out = to_handshake("BitTorrent protocol", &metadata.info_hash, &peer_id);
     for peer in peers {
-        connect_to_peer(peer);
+        connect_to_peer(peer, &metadata, &peer_id);
     }
 }
 
