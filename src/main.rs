@@ -15,7 +15,7 @@ use hyper::Client;
 use hyper::header::Connection;
 
 const PEER_ID_LENGTH:usize = 20;
-const PEER_ID_PREFIX:&'static str = "ABT:";
+const PEER_ID_PREFIX:&'static str = "-TR1000-";
 
 #[derive(Debug)]
 enum Address {
@@ -32,6 +32,7 @@ fn gen_rand_peer_id (prefix: &str) -> String {
 }
 
 fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap<String, Bencode>> {
+    println!("pinging tracker {}", announce);
     let req_addr = announce.to_string() + "?" + &QueryString::from(args).query_string();
     let client = Client::new();
     let mut res = client.get(&req_addr)
@@ -40,7 +41,9 @@ fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap
     let mut body = Vec::new();
     res.read_to_end(&mut body).unwrap();
 
-    deserialize(body).to_singleton_dict()
+    let d = deserialize(body).to_singleton_dict();
+    println!("tracker resp: {:?}", d);
+    d
 }
 
 fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
@@ -62,7 +65,7 @@ fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
 /// The peer handshake message, according to protocol
 ///
 fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
-    let reserved:[u8; 8] = [0; 8];
+    let reserved = [0u8; 8];
     let pstr_bytes = pstr.to_string().into_bytes();
     let a = [pstr_bytes.len() as u8];
     let b = pstr_bytes;
@@ -85,6 +88,7 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      }).collect::<Vec<u8>>();
 
     println!("hs.len(): {}", hs.len());
+    println!("{:?}", hs);
     hs
 }
 
@@ -101,7 +105,7 @@ fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
 
     println!("connected to {:?}", address);
 
-    let _ = stream.write(&to_handshake("BitTorrent protocol", &metadata.info_hash, peer_id));
+    let _ = stream.write_all(&to_handshake("BitTorrent protocol", &metadata.info_hash, peer_id));
 
     let mut buffer = Vec::new();
     match stream.read_to_end(&mut buffer) {
@@ -112,7 +116,7 @@ fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
     println!("res: {:?}", buffer);
 }
 
-fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
+fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let bytes_left = metadata.get_total_length() - bytes_dled;
 
@@ -134,6 +138,7 @@ fn init (metadata: Metadata, listen_port: u32, bytes_dled: u32) {
     };
 
     let peers = get_peers(&tracker_resp);
+    println!("{} peers", peers.len());
     let handshake_out = to_handshake("BitTorrent protocol", &metadata.info_hash, &peer_id);
     for peer in peers {
         connect_to_peer(peer, &metadata, &peer_id);
@@ -147,10 +152,13 @@ fn main () {
     let content = deserialize_file(path).unwrap_or_else(||panic!("unable to parse bencoded metadata"));
 
     let metadata = match content.first() {
-        Some(&Bencode::Dict(ref dict)) => dict.to_metadata(),
+        Some(&Bencode::Dict(ref dict)) => {
+            println!("{:?}", dict);
+            dict.to_metadata()
+        },
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
     //println!("{:?}", metadata);
-    init(metadata, 6888, 0);
+    init(&metadata, 6888, 0);
 }
