@@ -32,8 +32,8 @@ fn gen_rand_peer_id (prefix: &str) -> String {
 }
 
 fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap<String, Bencode>> {
-    println!("pinging tracker {}", announce);
     let req_addr = announce.to_string() + "?" + &QueryString::from(args).query_string();
+    println!("pinging tracker {}", req_addr);
     let client = Client::new();
     let mut res = client.get(&req_addr)
                         .header(Connection::close())
@@ -81,10 +81,8 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      c.iter(),
      d.iter(),
      e.iter()].iter().flat_map(|y| {
-         println!("{:?}", y.to_owned().collect::<Vec<&u8>>());
-         y.to_owned()
-                                    .map(|x| *x)
-                                    .collect::<Vec<u8>>()
+         //println!("{:?}", y.to_owned().collect::<Vec<&u8>>());
+         y.to_owned().map(|x| *x).collect::<Vec<u8>>()
      }).collect::<Vec<u8>>();
 
     println!("hs.len(): {}", hs.len());
@@ -150,6 +148,8 @@ fn main () {
                           .unwrap_or_else(||panic!("no path to torrent provided"));
 
     let content = deserialize_file(path).unwrap_or_else(||panic!("unable to parse bencoded metadata"));
+
+    asserteq!(metadata.len(), 1);
 
     let metadata = match content.first() {
         Some(&Bencode::Dict(ref dict)) => {

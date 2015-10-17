@@ -53,7 +53,7 @@ fn to_file_list (list: &Vec<Bencode>) -> Option<Vec<FileInfo>> {
         match item {
             &Bencode::Dict(ref hm) => {
                 let path_list_bencode = hm.get_list("path")
-                                          .unwrap()
+                                          .unwrap_or_else(||panic!("unable to get key path"))
                                           .iter()
                                           .map(|x| match x {
                                                     &Bencode::String(ref path) => path.to_string(),
@@ -88,7 +88,7 @@ impl MetadataDict for HashMap<String, Bencode> {
         let mode_info = match info_dict.get_list("files") {
             Some(flist) => {
                 FileMode::MultiFile(MultiFileInfo {
-                    files: to_file_list(flist).unwrap()
+                    files: to_file_list(flist).unwrap_or_else(|| panic!("unable to deserialize filelist"))
                 })
             },
             None => FileMode::SingleFile(SingleFileInfo {
