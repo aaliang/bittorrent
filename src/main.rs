@@ -41,9 +41,7 @@ fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap
     let mut body = Vec::new();
     res.read_to_end(&mut body).unwrap();
 
-    let d = deserialize(body).to_singleton_dict();
-    println!("tracker resp: {:?}", d);
-    d
+    deserialize(body).to_singleton_dict()
 }
 
 fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
