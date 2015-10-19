@@ -63,6 +63,8 @@ impl BencodeToString for Bencode {
                 kvs.sort_by(|a, b| a.0.cmp(&b.0));
                 vec.push("d".to_string());
                 for (key_name, val) in kvs {
+                    vec.push(key_name.len().to_string());
+                    vec.push(":".to_string());
                     vec.push(key_name.to_string());
                     vec.push(val.to_bencode_string());
                 }

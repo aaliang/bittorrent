@@ -3,7 +3,7 @@ extern crate rand;
 extern crate bittorrent;
 extern crate hyper;
 
-use std::env;
+use std::{env, str};
 use std::io::{Read, Write};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
@@ -71,7 +71,7 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
     let b = pstr_bytes;
     let c = reserved;
 
-    //println!("info_hash: {}", info_hash);
+    println!("info_hash: {}", str::from_utf8(info_hash).unwrap());
     println!("peer_id: {}", peer_id);
     let d = info_hash.clone();
     let e = peer_id.clone().into_bytes();
@@ -81,7 +81,6 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      c.iter(),
      d.iter(),
      e.iter()].iter().flat_map(|y| {
-         //println!("{:?}", y.to_owned().collect::<Vec<&u8>>());
          y.to_owned().map(|x| *x).collect::<Vec<u8>>()
      }).collect::<Vec<u8>>();
 
@@ -105,6 +104,8 @@ fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
 
     let _ = stream.write_all(&to_handshake("BitTorrent protocol", &metadata.info_hash, peer_id));
 
+    stream.flush();
+
     let mut buffer = Vec::new();
     match stream.read_to_end(&mut buffer) {
         Ok(bytes_read) => println!("bytes consumed: {}", bytes_read),
@@ -119,6 +120,7 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let bytes_left = metadata.get_total_length() - bytes_dled;
 
     let info_hash:String = metadata.info_hash.iter().map(|x| *x as char).collect();
+
     let response = ping_tracker(&metadata.announce, vec![
                                 ("info_hash", info_hash),
                                 ("peer_id", peer_id.clone()),
@@ -127,7 +129,8 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
                                 ("downloaded", bytes_dled.to_string()),
                                 ("left", bytes_left.to_string()),
                                 ("compact", 1.to_string()),
-                                ("event", "started".to_string())
+                                ("event", "started".to_string()),
+                                ("num_want", "50".to_string())
                                 ]);
 
     let tracker_resp = match response {
@@ -149,16 +152,16 @@ fn main () {
 
     let content = deserialize_file(path).unwrap_or_else(||panic!("unable to parse bencoded metadata"));
 
-    asserteq!(metadata.len(), 1);
+    assert_eq!(content.len(), 1);
 
     let metadata = match content.first() {
         Some(&Bencode::Dict(ref dict)) => {
-            println!("{:?}", dict);
+            //println!("{:?}", dict);
             dict.to_metadata()
         },
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
     //println!("{:?}", metadata);
-    init(&metadata, 6888, 0);
+    init(&metadata, 6887, 0);
 }

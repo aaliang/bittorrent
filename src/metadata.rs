@@ -81,9 +81,13 @@ impl MetadataDict for HashMap<String, Bencode> {
         let announce = self.get_string("announce").unwrap_or_else(||panic!("no key found for announce"));
         let info_dict = self.get_dict("info").unwrap_or_else(||panic!("no key found for info")).to_owned();
         let mut sha = Sha1::new();
+        let info_as_text = Bencode::Dict(info_dict.clone()).to_bencode_string();
+        println!("info_dict: {}", info_as_text);
         sha.input_str(&Bencode::Dict(info_dict.clone()).to_bencode_string());
         let mut info_hash:[u8; 20] = [0; 20];
-        let result = sha.result(&mut info_hash);
+        let _ = sha.result(&mut info_hash);
+
+        println!("info_hash: {:?}", info_hash);
 
         let mode_info = match info_dict.get_list("files") {
             Some(flist) => {
