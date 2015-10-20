@@ -6,6 +6,7 @@ use std::fs::File;
 use std::path::Path;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::str;
 use combine::{parser, between, many, many1, digit, char, Parser, ParserExt};
 use combine::primitives::{State, Stream, ParseResult, Consumed};
 use combine::combinator::FnParser;
@@ -14,7 +15,7 @@ use combine::combinator::FnParser;
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Bencode {
     Int(i64),
-    String(String),
+    ByteString(Vec<u8>),
     List(Vec<Bencode>),
     Dict(HashMap<String, Bencode>)
 }
@@ -37,8 +38,49 @@ impl BencodeVecOption for Option<Vec<Bencode>> {
     }
 }
 
+// pub trait BencodeToString {
+//     fn to_bencode_string (&self) -> String;
+// }
+//
+// //yes, we could just use the offsets from the parsed file. but we aren't keeping it around, nor
+// //are the parsers returning offsets right now (and as it's only needed for computing the
+// //hashsum... and computing this on the fly is comparatively easier than navigating through
+// //the sigils of combine
+// //
+// //might be worth adapting at the end as its modular, probably not worth it though)
+// impl BencodeToString for Bencode {
+//     fn to_bencode_string (&self) -> String {
+//         let vec: Vec<String> = match *self { //oh god... what did i do...
+//             Bencode::Int(ref int) =>
+//                 vec!["i".to_string(), int.to_string(), "e".to_string()],
+//             Bencode::ByteString(ref string) => {
+//                 println!("LEN: {}", string.clone().into_bytes().len());
+//                 vec![string.len().to_string(), ":".to_string(), string.chars().collect::<String>()]
+//             },
+//             Bencode::List(ref list) => {
+//                 list.iter().map(|x| x.to_bencode_string()).collect::<Vec<String>>()
+//             },
+//             Bencode::Dict(ref dict) => {
+//                 let mut vec: Vec<String> = Vec::new();
+//                 let mut kvs: Vec<(&String, &Bencode)> = dict.iter().collect();
+//                 kvs.sort_by(|a, b| a.0.cmp(&b.0));
+//                 vec.push("d".to_string());
+//                 for (key_name, val) in kvs {
+//                     vec.push(key_name.len().to_string());
+//                     vec.push(":".to_string());
+//                     vec.push(key_name.to_string());
+//                     vec.push(val.to_bencode_string());
+//                 }
+//                 vec.push("e".to_string());
+//                 vec
+//             }
+//         };
+//         vec.concat()
+//     }
+// }
+
 pub trait BencodeToString {
-    fn to_bencode_string (&self) -> String;
+    fn to_bencode_string (&self) -> Vec<u8>;
 }
 
 //yes, we could just use the offsets from the parsed file. but we aren't keeping it around, nor
@@ -48,31 +90,55 @@ pub trait BencodeToString {
 //
 //might be worth adapting at the end as its modular, probably not worth it though)
 impl BencodeToString for Bencode {
-    fn to_bencode_string (&self) -> String {
-        let vec: Vec<String> = match *self { //oh god... what did i do...
-            Bencode::Int(ref int) =>
-                vec!["i".to_string(), int.to_string(), "e".to_string()],
-            Bencode::String(ref string) =>
-                vec![string.len().to_string(), ":".to_string(), string.to_string()],
-            Bencode::List(ref list) => {
-                list.iter().map(|x| x.to_bencode_string()).collect::<Vec<String>>()
-            },
-            Bencode::Dict(ref dict) => {
-                let mut vec: Vec<String> = Vec::new();
-                let mut kvs: Vec<(&String, &Bencode)> = dict.iter().collect();
-                kvs.sort_by(|a, b| a.0.cmp(&b.0));
-                vec.push("d".to_string());
-                for (key_name, val) in kvs {
-                    vec.push(key_name.len().to_string());
-                    vec.push(":".to_string());
-                    vec.push(key_name.to_string());
-                    vec.push(val.to_bencode_string());
+    fn to_bencode_string (&self) -> Vec<u8> {
+        match *self { //oh god... what did i do...
+            Bencode::Int(ref int) => {
+                let mut vec: Vec<u8> = Vec::new();
+                vec.push('i' as u8);
+                for a_char in int.to_string().chars() {
+                    vec.push(a_char as u8);
                 }
-                vec.push("e".to_string());
+                vec.push('e' as u8);
                 vec
             }
-        };
-        vec.concat()
+            Bencode::ByteString(ref string) => {
+                //this is horrible and ugly because of a string/ascii oversight
+                let mut vec: Vec<u8> = Vec::new();
+                for a_char in string.len().to_string().chars() {
+                    vec.push(a_char as u8);
+                }
+                vec.push(':' as u8);
+                for byte in string.iter() {
+                    vec.push(*byte as u8);
+                }
+                vec
+            },
+            Bencode::List(ref list) => {
+                list.iter().flat_map(|x| x.to_bencode_string()).collect::<Vec<u8>>()
+            },
+            Bencode::Dict(ref dict) => {
+                let mut vec: Vec<u8> = Vec::new();
+                let mut kvs: Vec<(&String, &Bencode)> = dict.iter().collect();
+                kvs.sort_by(|a, b| a.0.cmp(&b.0));
+                vec.push('d' as u8);
+                for (key_name, val) in kvs {
+                    for a_char in key_name.len().to_string().chars() {
+                        vec.push(a_char as u8);
+                    }
+                    vec.push(':' as u8);
+                    for byte in key_name.chars() {
+                        vec.push(byte as u8);
+                    }
+                    // vec.push(key_name.to_string());
+                    for byte in val.to_bencode_string().iter() {
+                        vec.push(*byte as u8);
+                    }
+                    // vec.push(val.to_bencode_string());
+                }
+                vec.push('e' as u8);
+                vec
+            }
+        }
     }
 }
 
@@ -109,8 +175,8 @@ pub fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
 /// Provides typesafe getters for a collection
 pub trait TypedMethods {
     fn get_int(&self, key: &str) -> Option<i64>;
-    fn get_string(&self, key: &str) -> Option<&String>;
-    fn get_owned_string(&self, key: &str) -> Option<String>;
+    fn get_string(&self, key: &str) -> Option<&Vec<u8>>;
+    fn get_owned_string(&self, key: &str) -> Option<Vec<u8>>;
     fn get_dict(&self, key: &str) -> Option<&HashMap<String, Bencode>>;
     fn get_list(&self, key: &str) -> Option<&Vec<Bencode>>;
 }
@@ -123,16 +189,17 @@ impl TypedMethods for HashMap<String, Bencode> {
         }
     }
 
-    fn get_string (&self, key: &str) -> Option <&String> {
+    //yeah... that oversight is killing me. its actually a byte vector
+    fn get_string (&self, key: &str) -> Option <&Vec<u8>> {
         match self.get(key) {
-            Some(&Bencode::String(ref a)) => Some(a),
+            Some(&Bencode::ByteString(ref a)) => Some(a),
             _ => None
         }
     }
 
-    fn get_owned_string(&self, key: &str) -> Option <String> {
+    fn get_owned_string(&self, key: &str) -> Option <Vec<u8>> {
         match self.get(key) {
-            Some(&Bencode::String(ref a)) => Some(a.to_owned()),
+            Some(&Bencode::ByteString(ref a)) => Some(a.to_owned()),
             _ => None
         }
     }
@@ -160,7 +227,7 @@ fn bencode_integer<I>(input: State<I>) -> ParseResult<i64, I> where I: Stream<It
     int.parse_state(input)
 }
 
-fn bencode_string<I>(input: State<I>) -> ParseResult<String, I> where I: Stream<Item=char> {
+fn bencode_string<I>(input: State<I>) -> ParseResult<Vec<u8>, I> where I: Stream<Item=char> {
     let (len, input_) = try!(bencode_string_length_prefix(input));
     input_.combine(|input__| take(len).parse_state(input__))
 }
@@ -181,10 +248,12 @@ fn bencode_list<I>(input: State<I>) -> ParseResult<Vec<Bencode>, I> where I: Str
 fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> where I: Stream<Item=char> {
     let (open, close) = (char('d'), char('e'));
     let pairs = (parser(bencode_string), bencode_any());
-    let mut dict = between(open, close, many(pairs)).map(|entries:Vec<(String, Bencode)>|{
+    let mut dict = between(open, close, many(pairs)).map(|entries:Vec<(Vec<u8>, Bencode)>|{
         let mut hash_map = HashMap::new();
         for (k, v) in entries {
-            hash_map.insert(k, v);
+            // this is a dangerous assumption
+            let key_as_string = str::from_utf8(&k).unwrap().to_string();
+            hash_map.insert(key_as_string, v);
         }
         hash_map
     });
@@ -194,7 +263,7 @@ fn bencode_dict<I>(input: State<I>) -> ParseResult<HashMap<String, Bencode>, I> 
 fn bencode_any<I>() -> FnParser<I, fn (State<I>) -> ParseResult<Bencode, I>> where I: Stream<Item=char> {
     fn bencode_any_<I>(input: State<I>) -> ParseResult<Bencode, I> where I: Stream<Item=char> {
         parser(bencode_integer).map(Bencode::Int)
-            .or(parser(bencode_string).map(Bencode::String))
+            .or(parser(bencode_string).map(Bencode::ByteString))
             .or(parser(bencode_list).map(Bencode::List))
             .or(parser(bencode_dict).map(Bencode::Dict)).parse_state(input)
     }
@@ -209,8 +278,8 @@ fn take <I> (num: i32) -> SizedBuffer<I> where I: Stream<Item=char> {
 struct SizedBuffer <I>(i32, PhantomData<I>);
 impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
     type Input = I;
-    type Output = String;
-    fn parse_lazy(&mut self, mut input: State<I>) -> ParseResult<String, I> {
+    type Output = Vec<u8>;
+    fn parse_lazy(&mut self, mut input: State<I>) -> ParseResult<Vec<u8>, I> {
         let start = input.position;
         let mut vec_buf:Vec<char> = Vec::new();
         for _ in 0..self.0 {
@@ -227,7 +296,7 @@ impl <I> Parser for SizedBuffer<I> where I: Stream<Item=char> {
                 }
             };
         }
-        Ok((vec_buf.into_iter().collect(), Consumed::Consumed(input)))
+        Ok((vec_buf.clone().iter().map(|x| *x as u8).collect::<Vec<u8>>(), Consumed::Consumed(input)))
     }
 }
 
@@ -249,10 +318,10 @@ fn test_list() {
     assert_eq!(homogenous_int_list, Ok((vec![Bencode::Int(57), Bencode::Int(32)], "")));
 
     let homogenous_str_list = parser(bencode_list).parse("l3:abc5:defghe");
-    assert_eq!(homogenous_str_list, Ok((vec![Bencode::String("abc".to_string()), Bencode::String("defgh".to_string())], "")));
+    assert_eq!(homogenous_str_list, Ok((vec![Bencode::ByteString("abc".to_string()), Bencode::ByteString("defgh".to_string())], "")));
 
     let hetero_list = parser(bencode_list).parse("li32e3:abce");
-    assert_eq!(hetero_list, Ok((vec![Bencode::Int(32), Bencode::String("abc".to_string())], "")));
+    assert_eq!(hetero_list, Ok((vec![Bencode::Int(32), Bencode::ByteString("abc".to_string())], "")));
 }
 
 #[test]
@@ -275,8 +344,8 @@ fn test_many() {
         Bencode::Int(3),
         Bencode::Int(10),
         Bencode::List(vec![
-            Bencode::String("abc".to_string()),
-            Bencode::String("defg".to_string())
+            Bencode::ByteString("abc".to_string()),
+            Bencode::ByteString("defg".to_string())
             ]),
         Bencode::Dict(my_map)
     ]);

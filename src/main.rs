@@ -48,14 +48,14 @@ fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
     let peers = tracker_response.get_owned_string("peers").unwrap();
     //for now keep the bottom unused value, it's for ipv6. which maybe will be addressed
     let peers6 = tracker_response.get_owned_string("peers6").unwrap();
-    let peers_bytes = peers.chars().map(|x| x as u8).collect::<Vec<u8>>();
-    assert!(peers_bytes.len() % 6 == 0);
-    (0..peers_bytes.len()/6).map(|x| {
+    //let peers_bytes = peers.chars().map(|x| x as u8).collect::<Vec<u8>>();
+    //assert!(peers_bytes.len() % 6 == 0);
+    (0..peers.len()/6).map(|x| {
         let ip_start = x * 6;
         let ip_end = ip_start + 4;
-        let ip_bytes = &peers_bytes[ip_start..ip_end];
+        let ip_bytes = &peers[ip_start..ip_end];
         let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
-        let port = (peers_bytes[ip_end] as u16)*256 + peers_bytes[ip_end+1] as u16;
+        let port = (peers[ip_end] as u16)*256 + peers[ip_end+1] as u16;
         Address::TCP(ip, port)
     }).collect::<Vec<Address>>()
 }

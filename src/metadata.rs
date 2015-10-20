@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str;
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
 use bencode::{Bencode, TypedMethods, BencodeToString};
@@ -6,13 +7,13 @@ use bencode::{Bencode, TypedMethods, BencodeToString};
 #[derive(Clone, Debug)]
 pub struct SingleFileInfo {
     length: i64,
-    md5sum: Option<String>
+    md5sum: Option<Vec<u8>>
 }
 
 #[derive(Clone, Debug)]
 pub struct FileInfo {
     length: i64,
-    md5sum: Option<String>,
+    md5sum: Option<Vec<u8>>,
     path: Vec<String>
 }
 
@@ -33,7 +34,7 @@ pub struct Metadata {
     pub info_hash: [u8; 20],
     name: String,
     piece_length: i64,
-    pieces: String,
+    pieces: Vec<u8>,
     mode_info: FileMode,
 }
 
@@ -56,7 +57,13 @@ fn to_file_list (list: &Vec<Bencode>) -> Option<Vec<FileInfo>> {
                                           .unwrap_or_else(||panic!("unable to get key path"))
                                           .iter()
                                           .map(|x| match x {
-                                                    &Bencode::String(ref path) => path.to_string(),
+                                                    &Bencode::ByteString(ref path) => {
+                                                        //path.to_string(),
+                                                        match str::from_utf8(path) {
+                                                            Ok(v) => v.to_string(),
+                                                            Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+                                                        }
+                                                    }
                                                     _ => panic!("unexpected type")
                                           }).collect::<Vec<String>>();
                 FileInfo {
@@ -82,8 +89,8 @@ impl MetadataDict for HashMap<String, Bencode> {
         let info_dict = self.get_dict("info").unwrap_or_else(||panic!("no key found for info")).to_owned();
         let mut sha = Sha1::new();
         let info_as_text = Bencode::Dict(info_dict.clone()).to_bencode_string();
-        println!("info_dict: {}", info_as_text);
-        sha.input_str(&Bencode::Dict(info_dict.clone()).to_bencode_string());
+        // println!("info_dict: {}", info_as_text);
+        sha.input(&Bencode::Dict(info_dict.clone()).to_bencode_string());
         let mut info_hash:[u8; 20] = [0; 20];
         let _ = sha.result(&mut info_hash);
 
@@ -103,11 +110,11 @@ impl MetadataDict for HashMap<String, Bencode> {
 
         //for now only handle single file mode
         Some(Metadata {
-            announce: announce.clone(),
+            announce: str::from_utf8(&announce).unwrap().to_string(),
             info_hash: info_hash,
             piece_length: info_dict.get_int("piece length").unwrap_or_else(||panic!("no key found for piece length")),
-            pieces: info_dict.get_string("pieces").unwrap().to_string(),
-            name: info_dict.get_string("name").unwrap_or_else(||panic!("no key found for name")).to_string(),
+            pieces: info_dict.get_owned_string("pieces").unwrap(),
+            name: str::from_utf8(info_dict.get_string("name").unwrap_or_else(||panic!("no key found for name"))).unwrap().to_string(),
             mode_info: mode_info
         })
     }
