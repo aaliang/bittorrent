@@ -3,9 +3,10 @@ extern crate rand;
 extern crate bittorrent;
 extern crate hyper;
 
-use std::{env, str};
+use std::{env, str, thread};
 use std::io::{Read, Write};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
 use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOption};
 use rand::{Rng, thread_rng};
@@ -124,7 +125,7 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
                                 ("left", bytes_left.to_string()),
                                 ("compact", 1.to_string()),
                                 ("event", "started".to_string()),
-                                ("num_want", "50".to_string())
+                                ("num_want", "15".to_string())
                                 ]);
 
     let tracker_resp = match response {
@@ -137,8 +138,19 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peers = get_peers(&tracker_resp);
     println!("{} peers", peers.len());
     let handshake_out = to_handshake("BitTorrent protocol", &metadata.info_hash, &peer_id);
+
+    let mut children = vec![];
     for peer in peers {
-        connect_to_peer(peer, &metadata, &peer_id);
+        let child_meta = metadata.clone();
+        let peer_id = peer_id.clone();
+        children.push(thread::spawn(move || {
+            connect_to_peer(peer, &child_meta, &peer_id)
+        }));
+        //connect_to_peer(peer, &metadata, &peer_id);
+    }
+
+    for child in children {
+        let _ = child.join();
     }
 }
 
