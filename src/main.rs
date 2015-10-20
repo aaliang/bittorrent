@@ -45,11 +45,8 @@ fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap
 }
 
 fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
-    let peers = tracker_response.get_owned_string("peers").unwrap();
+    let peers = tracker_response.get_owned_string("peers").unwrap_or_else(||panic!("no peers found"));
     //for now keep the bottom unused value, it's for ipv6. which maybe will be addressed
-    let peers6 = tracker_response.get_owned_string("peers6").unwrap();
-    //let peers_bytes = peers.chars().map(|x| x as u8).collect::<Vec<u8>>();
-    //assert!(peers_bytes.len() % 6 == 0);
     (0..peers.len()/6).map(|x| {
         let ip_start = x * 6;
         let ip_end = ip_start + 4;
@@ -69,7 +66,7 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
     let b = pstr_bytes;
     let c = reserved;
 
-    println!("info_hash: {}", str::from_utf8(info_hash).unwrap());
+    println!("info_hash: {:?}", info_hash);
     println!("peer_id: {}", peer_id);
     let d = info_hash.clone();
     let e = peer_id.clone().into_bytes();
@@ -117,10 +114,9 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let bytes_left = metadata.get_total_length() - bytes_dled;
 
-    let info_hash:String = metadata.info_hash.iter().map(|x| *x as char).collect();
-
+    let info_hash_escaped = QueryString::encode_component(&metadata.info_hash);
     let response = ping_tracker(&metadata.announce, vec![
-                                ("info_hash", info_hash),
+                                ("info_hash", info_hash_escaped),
                                 ("peer_id", peer_id.clone()),
                                 ("port", listen_port.to_string()),
                                 ("uploaded", 0.to_string()),
@@ -135,6 +131,8 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
         Some(a) => a,
         None => panic!("no valid bencode response from tracker")
     };
+
+    println!("tracker resp: {:?}", tracker_resp);
 
     let peers = get_peers(&tracker_resp);
     println!("{} peers", peers.len());

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use url::percent_encoding::{utf8_percent_encode, DEFAULT_ENCODE_SET};
+use url::percent_encoding::{utf8_percent_encode, percent_encode, DEFAULT_ENCODE_SET};
 
 //generic query string builder, automatically escapes each parameter val if necessary
 //KEYS ARE TAKEN AS IS
@@ -29,6 +29,10 @@ impl <'a> QueryString<'a> {
                           .collect::<Vec<String>>()
                           .join("&");
         utf8_percent_encode(&qstring, DEFAULT_ENCODE_SET)
+    }
+
+    pub fn encode_component (component: &[u8]) -> String {
+        percent_encode(component, DEFAULT_ENCODE_SET)
     }
 
 }
