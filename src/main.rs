@@ -97,13 +97,13 @@ fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
 
     stream.flush();
 
-    let mut buffer = Vec::new();
-    match stream.read_to_end(&mut buffer) {
-        Ok(bytes_read) => println!("bytes consumed: {}", bytes_read),
-        Err(a) => println!("{}", a)
-    }
-
-    println!("res: {:?}", buffer);
+    //for now enforce a maximum handshake size of 512 bytes
+    let mut buffer = [0; 512];
+    let bytes_read = match stream.read(&mut buffer) {
+        Ok(bytes_read) => bytes_read,
+        Err(a) => panic!("error reading from peer: {:?}", a)
+    };
+    println!("res: {:?}", &buffer[0..bytes_read]);
 }
 
 fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
