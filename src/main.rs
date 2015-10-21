@@ -16,7 +16,7 @@ use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::bt_messages::{decode_message, test};
 use hyper::Client;
 use hyper::header::Connection;
-/*
+
 const PEER_ID_LENGTH:usize = 20;
 const PEER_ID_PREFIX:&'static str = "-TR1000-";
 
@@ -68,23 +68,16 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
     let a = [pstr_bytes.len() as u8];
     let b = pstr_bytes;
     let c = reserved;
-
-    println!("info_hash: {:?}", info_hash);
-    println!("peer_id: {}", peer_id);
     let d = info_hash.clone();
     let e = peer_id.clone().into_bytes();
 
-    let hs = [a.iter(),
+    [a.iter(),
      b.iter(),
      c.iter(),
      d.iter(),
      e.iter()].iter().flat_map(|y| {
          y.to_owned().map(|x| *x).collect::<Vec<u8>>()
-     }).collect::<Vec<u8>>();
-
-    println!("hs.len(): {}", hs.len());
-    println!("{:?}", hs);
-    hs
+     }).collect::<Vec<u8>>()
 }
 
 fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
@@ -175,8 +168,8 @@ fn start_torrenting () {
 
     init(&metadata, 6887, 0);
 }
-*/
+
 fn main () {
-    //start_torrenting();
-    test();
+    start_torrenting();
+    //test();
 }

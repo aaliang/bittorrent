@@ -1,6 +1,7 @@
 use std::io::Read;
 use std::io::Result;
 
+#[derive(Show)]
 pub enum Message {
     KeepAlive,
     Choke,
