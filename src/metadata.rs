@@ -105,7 +105,6 @@ impl MetadataDict for HashMap<String, Bencode> {
             None => FileMode::SingleFile(SingleFileInfo {
                 length: info_dict.get_int("length").unwrap_or_else(||panic!("no key found for length")),
                 md5sum: info_dict.get_owned_string("md5sum")})
-
         };
 
         //for now only handle single file mode

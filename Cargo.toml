@@ -13,13 +13,9 @@ hyper = "0.6"
 path = "src/bencode"
 
 [[bin]]
-name = "server"
-src = "src/server.rs"
-
-[[bin]]
-name = "client"
-src = "src/client.rs"
-
-[[bin]]
 name = "main"
 src = "src/main.rs"
+
+[[bin]]
+name = "bt_messages"
+src = "src/bt_messages.rs"

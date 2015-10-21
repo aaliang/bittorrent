@@ -1,3 +1,5 @@
+#![allow(unused_imports, unused_must_use, dead_code)]
+
 extern crate bencode;
 extern crate rand;
 extern crate bittorrent;
@@ -6,15 +8,15 @@ extern crate hyper;
 use std::{env, str, thread};
 use std::io::{Read, Write};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
 use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOption};
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
 use bittorrent::metadata::{MetadataDict, Metadata};
+use bittorrent::bt_messages::{decode_message, test};
 use hyper::Client;
 use hyper::header::Connection;
-
+/*
 const PEER_ID_LENGTH:usize = 20;
 const PEER_ID_PREFIX:&'static str = "-TR1000-";
 
@@ -141,12 +143,13 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
 
     let mut children = vec![];
     for peer in peers {
+        //using Arc makes the borrow checker compain. will have to revisit for maximum memory
+        //efficiency :)
         let child_meta = metadata.clone();
         let peer_id = peer_id.clone();
         children.push(thread::spawn(move || {
             connect_to_peer(peer, &child_meta, &peer_id)
         }));
-        //connect_to_peer(peer, &metadata, &peer_id);
     }
 
     for child in children {
@@ -154,7 +157,7 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     }
 }
 
-fn main () {
+fn start_torrenting () {
     let path = env::args().nth(1)
                           .unwrap_or_else(||panic!("no path to torrent provided"));
 
@@ -170,6 +173,10 @@ fn main () {
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
-    //println!("{:?}", metadata);
     init(&metadata, 6887, 0);
+}
+*/
+fn main () {
+    //start_torrenting();
+    test();
 }

@@ -38,47 +38,6 @@ impl BencodeVecOption for Option<Vec<Bencode>> {
     }
 }
 
-// pub trait BencodeToString {
-//     fn to_bencode_string (&self) -> String;
-// }
-//
-// //yes, we could just use the offsets from the parsed file. but we aren't keeping it around, nor
-// //are the parsers returning offsets right now (and as it's only needed for computing the
-// //hashsum... and computing this on the fly is comparatively easier than navigating through
-// //the sigils of combine
-// //
-// //might be worth adapting at the end as its modular, probably not worth it though)
-// impl BencodeToString for Bencode {
-//     fn to_bencode_string (&self) -> String {
-//         let vec: Vec<String> = match *self { //oh god... what did i do...
-//             Bencode::Int(ref int) =>
-//                 vec!["i".to_string(), int.to_string(), "e".to_string()],
-//             Bencode::ByteString(ref string) => {
-//                 println!("LEN: {}", string.clone().into_bytes().len());
-//                 vec![string.len().to_string(), ":".to_string(), string.chars().collect::<String>()]
-//             },
-//             Bencode::List(ref list) => {
-//                 list.iter().map(|x| x.to_bencode_string()).collect::<Vec<String>>()
-//             },
-//             Bencode::Dict(ref dict) => {
-//                 let mut vec: Vec<String> = Vec::new();
-//                 let mut kvs: Vec<(&String, &Bencode)> = dict.iter().collect();
-//                 kvs.sort_by(|a, b| a.0.cmp(&b.0));
-//                 vec.push("d".to_string());
-//                 for (key_name, val) in kvs {
-//                     vec.push(key_name.len().to_string());
-//                     vec.push(":".to_string());
-//                     vec.push(key_name.to_string());
-//                     vec.push(val.to_bencode_string());
-//                 }
-//                 vec.push("e".to_string());
-//                 vec
-//             }
-//         };
-//         vec.concat()
-//     }
-// }
-
 pub trait BencodeToString {
     fn to_bencode_string (&self) -> Vec<u8>;
 }
@@ -133,7 +92,6 @@ impl BencodeToString for Bencode {
                     for byte in val.to_bencode_string().iter() {
                         vec.push(*byte as u8);
                     }
-                    // vec.push(val.to_bencode_string());
                 }
                 vec.push('e' as u8);
                 vec
