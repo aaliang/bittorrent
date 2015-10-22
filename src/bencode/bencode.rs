@@ -111,7 +111,7 @@ pub fn open_file <P: AsRef<Path>>(path: P) -> Vec<u8> {
 
 /// Deserializes a bencoded file
 pub fn deserialize_file<P: AsRef<Path>>(path: P) -> Option<Vec<Bencode>> {
-    deserialize(open_file(path))
+    deserialize(&open_file(path))
 }
 
 /// Takes an input (vector of bytes) and returns the deserialized form as a vector of Bencode(d)
@@ -120,7 +120,7 @@ pub fn deserialize_file<P: AsRef<Path>>(path: P) -> Option<Vec<Bencode>> {
 /// there's probably an argument that this should be a Result as opposed to an Option, as you
 /// could potentially be losing error pertinent information in an Option. not going to change it over
 /// right now
-pub fn deserialize (byte_vector: Vec<u8>) -> Option<Vec<Bencode>> {
+pub fn deserialize (byte_vector: &[u8]) -> Option<Vec<Bencode>> {
     //hack to coerce ascii byte values to rust array sliceof char (UTF-8). necessary to avoid substantial
     //writing of existing combine parser builtins
     let as_string: Vec<char> = byte_vector.iter().map(|x| *x as char).collect();

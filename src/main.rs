@@ -44,7 +44,7 @@ fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap
     let mut body = Vec::new();
     res.read_to_end(&mut body).unwrap();
 
-    deserialize(body).to_singleton_dict()
+    deserialize(&body).to_singleton_dict()
 }
 
 fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
@@ -80,7 +80,7 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      }).collect::<Vec<u8>>()
 }
 
-fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
+fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<([u8; 512], usize), String> {
     println!("connecting to {:?}", address);
     let (ip, port) = match address {
         Address::TCP(ip_address, port) => (ip_address, port)
@@ -88,22 +88,25 @@ fn connect_to_peer(address:Address, metadata: &Metadata, peer_id: &String) {
 
     let mut stream = match TcpStream::connect(SocketAddrV4::new(ip, port)) {
         Ok(tcp_stream) => tcp_stream,
-        _ => panic!("unable to connect to socket")
+        Err(err) => return Err(format!("unable to connect to peer {:?}", ip))
     };
 
     println!("connected to {:?}", address);
 
     let _ = stream.write_all(&to_handshake("BitTorrent protocol", &metadata.info_hash, peer_id));
-
-    stream.flush();
+    let _ = stream.flush();
 
     //for now enforce a maximum handshake size of 512 bytes
     let mut buffer = [0; 512];
-    let bytes_read = match stream.read(&mut buffer) {
-        Ok(bytes_read) => bytes_read,
-        Err(a) => panic!("error reading from peer: {:?}", a)
-    };
-    println!("res: {:?}", &buffer[0..bytes_read]);
+    match stream.read(&mut buffer) {
+        Ok(bytes_read) => {
+            let something = &buffer[0..bytes_read];
+
+            Ok((buffer, bytes_read))
+            //Ok((&buffer[0..bytes_read], buffer))
+        },
+        Err(err) => Err(format!("unable to read from peer {:?}", ip))
+    }
 }
 
 fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
@@ -127,8 +130,6 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
         Some(a) => a,
         None => panic!("no valid bencode response from tracker")
     };
-
-    println!("tracker resp: {:?}", tracker_resp);
 
     let peers = get_peers(&tracker_resp);
     println!("{} peers", peers.len());
