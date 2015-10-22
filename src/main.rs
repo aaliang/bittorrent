@@ -9,6 +9,7 @@ use std::{env, str, thread};
 use std::io::{Read, Write};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
+use std::sync::mpsc::channel;
 use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOption};
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
@@ -124,7 +125,7 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
     }
 }
 
-fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+fn get_http_tracker_peers (peer_id: &String, metadata: &Metadata, listen_port:u32, bytes_dled: u32) -> Option<Vec<Address>> {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let bytes_left = metadata.get_total_length() - bytes_dled;
 
@@ -141,29 +142,48 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
                                 ("num_want", "15".to_string())
                                 ]);
 
-    let tracker_resp = match response {
-        Some(a) => a,
+    match response {
+        Some(resp) => Some(get_peers(&resp)),
         None => panic!("no valid bencode response from tracker")
+    }
+}
+
+fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+    let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
+    let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
+        Some(peers) => peers,
+        _ => panic!("cannot get peers from tracker")
     };
 
-    let peers = get_peers(&tracker_resp);
-    println!("{} peers", peers.len());
-    let handshake_out = to_handshake("BitTorrent protocol", &metadata.info_hash, &peer_id);
+    println!("got {} peers", peers.len());
 
-    let mut children = vec![];
+    let (tx, rx) = channel();
+
+    //TODO: the sink initialization should be done outside of init() as one sink can realistically
+    //handle multiple torrents relatively trivially
+    //all threads will send messages asynchronously to the sink. tbh the loop could be shoved onto the main
+    //thread, but for the sake of modularity lets dedicated one for the sink
+    let sink = thread::spawn(move || {
+        loop {
+            let res = rx.recv().unwrap();
+            println!("{:?}", res);
+        }
+    });
+
     for peer in peers {
         //using Arc makes the borrow checker compain. will have to revisit for maximum memory
         //efficiency :)
         let child_meta = metadata.clone();
         let peer_id = peer_id.clone();
-        children.push(thread::spawn(move || {
-            connect_to_peer(peer, &child_meta, &peer_id)
-        }));
+        let tx = tx.clone();
+        thread::spawn(move || {
+            let conn = connect_to_peer(peer, &child_meta, &peer_id).unwrap();
+            tx.send(conn);
+        });
     }
 
-    for child in children {
-        let _ = child.join();
-    }
+    //block until the sink shuts down
+    let _ = sink.join();
 }
 
 fn start_torrenting () {
