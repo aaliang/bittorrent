@@ -80,7 +80,16 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      }).collect::<Vec<u8>>()
 }
 
-fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<([u8; 512], usize), String> {
+fn decode_handshake(resp: &[u8]) {
+    println!("len: {}", resp.len());
+    let (pstrlen, rest) = {
+        let (l, r) = resp.split_at(1);
+        (l[0], r)
+    };
+    //let pstr = resp[1..pstrlen+1];
+}
+
+fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<String, String> {
     println!("connecting to {:?}", address);
     let (ip, port) = match address {
         Address::TCP(ip_address, port) => (ip_address, port)
@@ -99,10 +108,11 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
     //for now enforce a maximum handshake size of 512 bytes
     let mut buffer = [0; 512];
     match stream.read(&mut buffer) {
+        Ok(0) => Err(format!("invalid handshake from peer")),
         Ok(bytes_read) => {
             let something = &buffer[0..bytes_read];
-
-            Ok((buffer, bytes_read))
+            decode_handshake(&buffer[0..bytes_read]);
+            Ok("id".to_string())
             //Ok((&buffer[0..bytes_read], buffer))
         },
         Err(err) => Err(format!("unable to read from peer {:?}", ip))
