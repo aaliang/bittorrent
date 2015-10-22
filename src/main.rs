@@ -48,6 +48,7 @@ fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap
     deserialize(&body).to_singleton_dict()
 }
 
+/// Gets peer addresses from a received tracker response. These are just Ipv4 addresses currently
 fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
     let peers = tracker_response.get_owned_string("peers").unwrap_or_else(||panic!("no peers found"));
     //for now keep the bottom unused value, it's for ipv6. which maybe will be addressed
@@ -69,7 +70,7 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
     let a = [pstr_bytes.len() as u8];
     let b = pstr_bytes;
     let c = reserved;
-    let d = info_hash.clone();
+    let d = info_hash;
     let e = peer_id.clone().into_bytes();
 
     [a.iter(),
@@ -81,7 +82,7 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      }).collect::<Vec<u8>>()
 }
 
-fn decode_handshake(resp: &[u8]) -> (u8, &[u8], &[u8], &[u8], &[u8]){
+fn decode_handshake(resp: &[u8]) -> (&[u8], &[u8], &[u8], &[u8]){
     //i realize this is the goofiest looking block ever... but you cant really destructure a
     //vector so i'm sticking with the tuples for now. maybe i'll make it look normal later
     let (pstrlen, a0) = {
@@ -93,7 +94,7 @@ fn decode_handshake(resp: &[u8]) -> (u8, &[u8], &[u8], &[u8], &[u8]){
     let (info_hash, a3) = a2.split_at(20);
     let (peer_id, _) = a3.split_at(20);
 
-    (pstrlen, protocol, reserved, info_hash, peer_id)
+    (protocol, reserved, info_hash, peer_id)
 }
 
 fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<Vec<u8>, String> {
@@ -118,8 +119,12 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
         Ok(0) => Err(format!("invalid handshake from peer")),
         Ok(bytes_read) => {
             let something = &buffer[0..bytes_read];
-            let (pstrlen, protocol, reserved, info_hash, peer_id) = decode_handshake(&buffer[0..bytes_read]);
-            Ok(peer_id.to_owned())
+            let (protocol, reserved, info_hash, peer_id) = decode_handshake(&buffer[0..bytes_read]);
+            let info_hash = metadata.info_hash;
+            match (protocol, info_hash) {
+                (b"BitTorrent protocol", info_hash) => Ok(peer_id.to_owned()),
+                _ => Err(format!("invalid peer handshake"))
+            }
         },
         Err(err) => Err(format!("unable to read from peer {:?}", ip))
     }
@@ -171,8 +176,6 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     });
 
     for peer in peers {
-        //using Arc makes the borrow checker compain. will have to revisit for maximum memory
-        //efficiency :)
         let child_meta = metadata.clone();
         let peer_id = peer_id.clone();
         let tx = tx.clone();
@@ -195,10 +198,7 @@ fn start_torrenting () {
     assert_eq!(content.len(), 1);
 
     let metadata = match content.first() {
-        Some(&Bencode::Dict(ref dict)) => {
-            //println!("{:?}", dict);
-            dict.to_metadata()
-        },
+        Some(&Bencode::Dict(ref dict)) => dict.to_metadata(),
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
