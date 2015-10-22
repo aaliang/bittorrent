@@ -1,11 +1,11 @@
-#![allow(unused_imports, unused_must_use, dead_code)]
+//#![allow(unused_imports, unused_must_use, dead_code)]
 
 extern crate bencode;
 extern crate rand;
 extern crate bittorrent;
 extern crate hyper;
 
-use std::{env, str, thread};
+use std::{env, thread};
 use std::io::{Read, Write};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
@@ -105,7 +105,7 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
 
     let mut stream = match TcpStream::connect(SocketAddrV4::new(ip, port)) {
         Ok(tcp_stream) => tcp_stream,
-        Err(err) => return Err(format!("unable to connect to peer {:?}", ip))
+        Err(_) => return Err(format!("unable to connect to peer {:?}", ip))
     };
 
     println!("connected to {:?}", address);
@@ -118,11 +118,9 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
     match stream.read(&mut buffer) {
         Ok(0) => Err(format!("invalid handshake from peer")),
         Ok(bytes_read) => {
-            let something = &buffer[0..bytes_read];
-            let (protocol, reserved, info_hash, peer_id) = decode_handshake(&buffer[0..bytes_read]);
-            let info_hash = metadata.info_hash;
+            let (protocol, _, info_hash, peer_id) = decode_handshake(&buffer[0..bytes_read]);
             match (protocol, info_hash) {
-                (b"BitTorrent protocol", info_hash) => Ok(peer_id.to_owned()),
+                (b"BitTorrent protocol", i_h) if i_h == metadata.info_hash => Ok(peer_id.to_owned()),
                 _ => Err(format!("invalid peer handshake"))
             }
         },
