@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::io::Result;
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum Message {
     KeepAlive,
     Choke,
@@ -17,9 +17,60 @@ pub enum Message {
     Unhandled
 }
 
+/// Tries to decode a message according to the bittorrent protocol from a slice of bytes
+/// If it is not complete, it will return None
+///
+/// # Preconditions
+/// ```assert(bytes.len() > 3)```
+///
+pub fn try_decode (bytes: &[u8]) -> Option<Message> {
+    let rest = &bytes[4..];
+    match u8_4_to_u32(&bytes[0..4]) {
+        0 => Some(Message::KeepAlive),
+        len => { //len is inclusive of the id byte
+            let rest_len = rest.len();
+            let message_type = match rest.first() {
+                None => return None,
+                Some(a) => a
+            };
+            let message = match *message_type {
+                _ if len > rest.len() as u32 => return None, //the entire envelope is not here yet
+                0 => Message::Choke,
+                1 => Message::Unchoke,
+                2 => Message::Interested,
+                3 => Message::NotInterested,
+                4 => Message::Have{piece_index: u8_4_to_u32(&rest[1..5])},
+                5 => Message::Bitfield((&rest[1..len as usize]).to_owned()),
+                6 => {
+                    let index = u8_4_to_u32(&rest[1..5]);
+                    let begin = u8_4_to_u32(&rest[5..9]);
+                    let length = u8_4_to_u32(&rest[9..13]);
+                    Message::Request{index: index, begin: begin, length: length}
+                },
+                7 => {
+                    let index = u8_4_to_u32(&rest[1..5]);
+                    let begin = u8_4_to_u32(&rest[5..9]);
+                    let block = (&rest[9..len as usize]).to_owned();
+                    Message::Piece{index: index, begin: begin, block: block}
+                },
+                8  => {
+                    let index = u8_4_to_u32(&rest[1..5]);
+                    let begin = u8_4_to_u32(&rest[5..9]);
+                    let length = u8_4_to_u32(&rest[9..13]);
+                    Message::Cancel{index: index, begin: begin, length: length}
+                },
+                9 => Message::Port(u8_2_to_u16(&rest[1..3])),
+                _ => return None
+            };
+
+            Some(message)
+
+        }
+    }
+}
 ///len_prefix is big endian
 ///might want to use traits instead of returning an enum... haven't decided yet. would save a match
-pub fn decode_message <T> (len_prefix: &[u8; 4], stream: &mut T) -> Message where T:Read {
+pub fn decode_message <T> (len_prefix: &[u8], stream: &mut T) -> Message where T:Read {
     let i = u8_4_to_u32(len_prefix);
     match i {
         0 => Message::KeepAlive,
@@ -77,11 +128,11 @@ pub fn decode_message <T> (len_prefix: &[u8; 4], stream: &mut T) -> Message wher
 
 
 //the following two definitions feel clunky. can probably genericize over num bytes somehow
-fn u8_2_to_u16 (bytes: &[u8; 2]) -> u16 {
+fn u8_2_to_u16 (bytes: &[u8]) -> u16 {
     (bytes[1] as u16 | (bytes[0] as u16) << 8)
 }
 
-fn u8_4_to_u32 (bytes: &[u8; 4]) -> u32 {
+fn u8_4_to_u32 (bytes: &[u8]) -> u32 {
     (bytes[3] as u32
         | ((bytes[2] as u32) << 8)
         | ((bytes[1] as u32) << 16)

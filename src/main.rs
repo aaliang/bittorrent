@@ -1,5 +1,3 @@
-//#![allow(unused_imports, unused_must_use, dead_code)]
-
 extern crate bencode;
 extern crate rand;
 extern crate bittorrent;
@@ -14,7 +12,8 @@ use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOp
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
 use bittorrent::metadata::{MetadataDict, Metadata};
-use bittorrent::bt_messages::{decode_message, test};
+use bittorrent::bt_messages::decode_message;
+use bittorrent::buffered_reader;
 use hyper::Client;
 use hyper::header::Connection;
 
@@ -82,7 +81,7 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      }).collect::<Vec<u8>>()
 }
 
-fn decode_handshake(resp: &[u8]) -> (&[u8], &[u8], &[u8], &[u8]){
+fn decode_handshake(resp: &[u8]) -> (&[u8], &[u8], &[u8], &[u8], &[u8]){
     //i realize this is the goofiest looking block ever... but you cant really destructure a
     //vector so i'm sticking with the tuples for now. maybe i'll make it look normal later
     let (pstrlen, a0) = {
@@ -92,9 +91,9 @@ fn decode_handshake(resp: &[u8]) -> (&[u8], &[u8], &[u8], &[u8]){
     let (protocol, a1) = a0.split_at(pstrlen as usize);
     let (reserved, a2) = a1.split_at(8);
     let (info_hash, a3) = a2.split_at(20);
-    let (peer_id, _) = a3.split_at(20);
+    let (peer_id, remainder) = a3.split_at(20);
 
-    (protocol, reserved, info_hash, peer_id)
+    (protocol, reserved, info_hash, peer_id, remainder)
 }
 
 fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<Vec<u8>, String> {
@@ -118,18 +117,20 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
     match stream.read(&mut buffer) {
         Ok(0) => Err(format!("invalid handshake from peer")),
         Ok(bytes_read) => {
-            let (protocol, _, info_hash, peer_id) = decode_handshake(&buffer[0..bytes_read]);
+            let (protocol, _, info_hash, peer_id, rest) = decode_handshake(&buffer[0..bytes_read]);
             match (protocol, info_hash) {
-                (b"BitTorrent protocol", i_h) if i_h == metadata.info_hash => Ok(peer_id.to_owned()),
+                (b"BitTorrent protocol", i_h) if i_h == metadata.info_hash => {
+                    println!("rest: {:?}", rest);
+                    Ok(peer_id.to_owned())
+                },
                 _ => Err(format!("invalid peer handshake"))
             }
         },
-        Err(err) => Err(format!("unable to read from peer {:?}", ip))
+        Err(_) => Err(format!("unable to read from peer {:?}", ip))
     }
 }
 
 fn get_http_tracker_peers (peer_id: &String, metadata: &Metadata, listen_port:u32, bytes_dled: u32) -> Option<Vec<Address>> {
-    let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let bytes_left = metadata.get_total_length() - bytes_dled;
 
     let info_hash_escaped = QueryString::encode_component(&metadata.info_hash);
