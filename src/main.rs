@@ -80,16 +80,22 @@ fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
      }).collect::<Vec<u8>>()
 }
 
-fn decode_handshake(resp: &[u8]) {
-    println!("len: {}", resp.len());
-    let (pstrlen, rest) = {
-        let (l, r) = resp.split_at(1);
+fn decode_handshake(resp: &[u8]) -> (u8, &[u8], &[u8], &[u8], &[u8]){
+    //i realize this is the goofiest looking block ever... but you cant really destructure a
+    //vector so i'm sticking with the tuples for now. maybe i'll make it look normal later
+    let (pstrlen, a0) = {
+        let (l, r) = resp.split_at(1 as usize);
         (l[0], r)
     };
-    //let pstr = resp[1..pstrlen+1];
+    let (protocol, a1) = a0.split_at(pstrlen as usize);
+    let (reserved, a2) = a1.split_at(8);
+    let (info_hash, a3) = a2.split_at(20);
+    let (peer_id, _) = a3.split_at(20);
+
+    (pstrlen, protocol, reserved, info_hash, peer_id)
 }
 
-fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<String, String> {
+fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<Vec<u8>, String> {
     println!("connecting to {:?}", address);
     let (ip, port) = match address {
         Address::TCP(ip_address, port) => (ip_address, port)
@@ -111,9 +117,8 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
         Ok(0) => Err(format!("invalid handshake from peer")),
         Ok(bytes_read) => {
             let something = &buffer[0..bytes_read];
-            decode_handshake(&buffer[0..bytes_read]);
-            Ok("id".to_string())
-            //Ok((&buffer[0..bytes_read], buffer))
+            let (pstrlen, protocol, reserved, info_hash, peer_id) = decode_handshake(&buffer[0..bytes_read]);
+            Ok(peer_id.to_owned())
         },
         Err(err) => Err(format!("unable to read from peer {:?}", ip))
     }
