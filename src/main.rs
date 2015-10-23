@@ -1,28 +1,16 @@
 extern crate bencode;
 extern crate rand;
 extern crate bittorrent;
-extern crate hyper;
 
 use std::{env, thread};
 use std::io::{Read, Write};
-use std::collections::HashMap;
-use std::net::{Ipv4Addr, TcpStream, SocketAddrV4};
+use std::net::{TcpStream, SocketAddrV4};
 use std::sync::mpsc::channel;
-use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOption};
+use bencode::{deserialize_file, Bencode};
 use rand::{Rng, thread_rng};
-use bittorrent::querystring::QueryString;
 use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::buffered_reader::BufferedReader;
-use hyper::Client;
-use hyper::header::Connection;
-
-const PEER_ID_LENGTH:usize = 20;
-const PEER_ID_PREFIX:&'static str = "-TR1000-";
-
-#[derive(Debug)]
-enum Address {
-    TCP(Ipv4Addr, u16)
-}
+use bittorrent::tracker::{Address, get_http_tracker_peers, PEER_ID_PREFIX, PEER_ID_LENGTH};
 
 fn gen_rand_peer_id (prefix: &str) -> String {
     let rand_length = PEER_ID_LENGTH - prefix.len();
@@ -31,33 +19,6 @@ fn gen_rand_peer_id (prefix: &str) -> String {
                            .collect::<String>();
 
     prefix.to_string() + &rand
-}
-
-fn ping_tracker (announce: &String, args: Vec<(&str, String)>) -> Option<HashMap<String, Bencode>> {
-    let req_addr = announce.to_string() + "?" + &QueryString::from(args).query_string();
-    println!("pinging tracker {}", req_addr);
-    let client = Client::new();
-    let mut res = client.get(&req_addr)
-                        .header(Connection::close())
-                        .send().unwrap();
-    let mut body = Vec::new();
-    res.read_to_end(&mut body).unwrap();
-
-    deserialize(&body).to_singleton_dict()
-}
-
-/// Gets peer addresses from a received tracker response. These are just Ipv4 addresses currently
-fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
-    let peers = tracker_response.get_owned_string("peers").unwrap_or_else(||panic!("no peers found"));
-    //for now keep the bottom unused value, it's for ipv6. which maybe will be addressed
-    (0..peers.len()/6).map(|x| {
-        let ip_start = x * 6;
-        let ip_end = ip_start + 4;
-        let ip_bytes = &peers[ip_start..ip_end];
-        let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
-        let port = (peers[ip_end] as u16)*256 + peers[ip_end+1] as u16;
-        Address::TCP(ip, port)
-    }).collect::<Vec<Address>>()
 }
 
 /// The peer handshake message, according to protocol
@@ -129,28 +90,6 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
     }
 }
 
-fn get_http_tracker_peers (peer_id: &String, metadata: &Metadata, listen_port:u32, bytes_dled: u32) -> Option<Vec<Address>> {
-    let bytes_left = metadata.get_total_length() - bytes_dled;
-
-    let info_hash_escaped = QueryString::encode_component(&metadata.info_hash);
-    let response = ping_tracker(&metadata.announce, vec![
-                                ("info_hash", info_hash_escaped),
-                                ("peer_id", peer_id.clone()),
-                                ("port", listen_port.to_string()),
-                                ("uploaded", 0.to_string()),
-                                ("downloaded", bytes_dled.to_string()),
-                                ("left", bytes_left.to_string()),
-                                ("compact", 1.to_string()),
-                                ("event", "started".to_string()),
-                                ("num_want", 15.to_string())
-                                ]);
-
-    match response {
-        Some(resp) => Some(get_peers(&resp)),
-        None => panic!("no valid bencode response from tracker")
-    }
-}
-
 fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
@@ -169,7 +108,7 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let sink = thread::spawn(move || {
         loop {
             let res = rx.recv().unwrap();
-            //println!("{:?}", res);
+            println!("{:?}", res);
         }
     });
 
@@ -178,20 +117,21 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
         let peer_id = peer_id.clone();
         let tx = tx.clone();
         thread::spawn(move || {
-            //let (_, ref mut reader) = connect_to_peer(peer, &child_meta, &peer_id).unwrap();
-            //let s = reader.wait_for_message();
-
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((ref peer_id, ref mut reader)) => {
-                    let x = 3;
-                    let message = reader.wait_for_message();
-                    println!("msg: {:?}", message);
+                    match reader.wait_for_message() {
+                        Ok(message) => {
+                            tx.send((message));
+                        },
+                        e @ Err(_) => {
+                            println!("error waiting for message");
+                        }
+                    }
                 },
-                e @ Err(_) => {
-                    println!("x");
+                Err(e) => {
+                    println!("{:?}", e);
                 }
             };
-            tx.send(1337);
         });
     }
 
