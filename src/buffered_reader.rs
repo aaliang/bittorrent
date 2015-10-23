@@ -1,5 +1,3 @@
-#![feature(split_off)]
-
 use std::io::Read;
 use std::io::Result;
 use bt_messages::{Message, try_decode};

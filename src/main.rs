@@ -142,7 +142,7 @@ fn get_http_tracker_peers (peer_id: &String, metadata: &Metadata, listen_port:u3
                                 ("left", bytes_left.to_string()),
                                 ("compact", 1.to_string()),
                                 ("event", "started".to_string()),
-                                ("num_want", "15".to_string())
+                                ("num_want", 15.to_string())
                                 ]);
 
     match response {
@@ -178,8 +178,20 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
         let peer_id = peer_id.clone();
         let tx = tx.clone();
         thread::spawn(move || {
-            let conn = connect_to_peer(peer, &child_meta, &peer_id).unwrap();
-            tx.send(conn);
+            //let (_, ref mut reader) = connect_to_peer(peer, &child_meta, &peer_id).unwrap();
+            //let s = reader.wait_for_message();
+
+            match connect_to_peer(peer, &child_meta, &peer_id) {
+                Ok((ref peer_id, ref mut reader)) => {
+                    let x = 3;
+                    let message = reader.wait_for_message();
+                    println!("msg: {:?}", message);
+                },
+                e @ Err(_) => {
+                    println!("x");
+                }
+            };
+            tx.send(1337);
         });
     }
 
