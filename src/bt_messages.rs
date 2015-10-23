@@ -19,14 +19,17 @@ pub enum Message {
 
 /// Tries to decode a message according to the bittorrent protocol from a slice of bytes
 /// If it is not complete, it will return None
+/// If successful it will return a tuple enveloping the message in deserialized form and the number
+/// of bytes that it consumed. n.b. done immutably - the caller will need to advance the pointer
 ///
 /// # Preconditions
 /// ```assert(bytes.len() > 3)```
 ///
-pub fn try_decode (bytes: &[u8]) -> Option<Message> {
+pub fn try_decode (bytes: &[u8]) -> Option<(Message, u32)> {
+    //yes there are some magic numbers floating around in here... but they're byte manipulations
     let rest = &bytes[4..];
     match u8_4_to_u32(&bytes[0..4]) {
-        0 => Some(Message::KeepAlive),
+        0 => Some((Message::KeepAlive, 4)),
         len => { //len is inclusive of the id byte
             let rest_len = rest.len();
             let message_type = match rest.first() {
@@ -63,7 +66,8 @@ pub fn try_decode (bytes: &[u8]) -> Option<Message> {
                 _ => return None
             };
 
-            Some(message)
+            //successfully consume the len + the 4 byte length value
+            Some((message, len + 4))
 
         }
     }

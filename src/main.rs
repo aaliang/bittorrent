@@ -13,7 +13,7 @@ use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
 use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::bt_messages::decode_message;
-use bittorrent::buffered_reader;
+use bittorrent::buffered_reader::BufferedReader;
 use hyper::Client;
 use hyper::header::Connection;
 
@@ -96,7 +96,8 @@ fn decode_handshake(resp: &[u8]) -> (&[u8], &[u8], &[u8], &[u8], &[u8]){
     (protocol, reserved, info_hash, peer_id, remainder)
 }
 
-fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<Vec<u8>, String> {
+//this seems overly verbose (the signature)
+fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> Result<(Vec<u8>, BufferedReader<TcpStream>), String> {
     println!("connecting to {:?}", address);
     let (ip, port) = match address {
         Address::TCP(ip_address, port) => (ip_address, port)
@@ -120,8 +121,7 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
             let (protocol, _, info_hash, peer_id, rest) = decode_handshake(&buffer[0..bytes_read]);
             match (protocol, info_hash) {
                 (b"BitTorrent protocol", i_h) if i_h == metadata.info_hash => {
-                    println!("rest: {:?}", rest);
-                    Ok(peer_id.to_owned())
+                    Ok((peer_id.to_owned(), BufferedReader::new(stream, buffer.to_vec())))
                 },
                 _ => Err(format!("invalid peer handshake"))
             }
@@ -170,7 +170,7 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let sink = thread::spawn(move || {
         loop {
             let res = rx.recv().unwrap();
-            println!("{:?}", res);
+            //println!("{:?}", res);
         }
     });
 

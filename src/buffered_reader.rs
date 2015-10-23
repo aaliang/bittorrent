@@ -2,21 +2,20 @@ use std::io::Read;
 use std::io::Result;
 use bt_messages::{Message, try_decode};
 
-struct BufferedReader <'a, T> where T: Read {
+pub struct BufferedReader <T> where T: Read {
     readable: T,
-    spare: &'a [u8]
+    spare: Vec<u8>
 }
 
-impl <'a, T> BufferedReader <'a, T> where T:Read {
-
-    fn new (readable: T, spare: &[u8]) -> BufferedReader <T> {
+impl <T> BufferedReader <T> where T:Read {
+    pub fn new (readable: T, spare: Vec<u8>) -> BufferedReader <T> {
         BufferedReader {
             readable: readable,
             spare: spare
         }
     }
 
-    fn wait_for_message(&mut self) -> Result<Message> {
+    pub fn wait_for_message(&mut self) -> Result<Message> {
         let mut buffer:Vec<u8> = Vec::new();
         loop {
             let mut i_buff = [0; 512];
