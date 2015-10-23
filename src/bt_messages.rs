@@ -26,6 +26,7 @@ pub enum Message {
 /// ```assert(bytes.len() > 3)```
 ///
 pub fn try_decode (bytes: &[u8]) -> Option<(Message, usize)> {
+    //println!("tcp buffer: {:?}", bytes);
     //yes there are some magic numbers floating around in here... but they're byte manipulations
     let rest = &bytes[4..];
     match u8_4_to_u32(&bytes[0..4]) as usize {

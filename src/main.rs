@@ -120,7 +120,7 @@ fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String) -> 
             let (protocol, _, info_hash, peer_id, rest) = decode_handshake(&buffer[0..bytes_read]);
             match (protocol, info_hash) {
                 (b"BitTorrent protocol", i_h) if i_h == metadata.info_hash => {
-                    Ok((peer_id.to_owned(), BufferedReader::new(stream, buffer.to_vec())))
+                    Ok((peer_id.to_owned(), BufferedReader::new(stream, rest.to_vec())))
                 },
                 _ => Err(format!("invalid peer handshake"))
             }
