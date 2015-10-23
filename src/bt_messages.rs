@@ -25,10 +25,10 @@ pub enum Message {
 /// # Preconditions
 /// ```assert(bytes.len() > 3)```
 ///
-pub fn try_decode (bytes: &[u8]) -> Option<(Message, u32)> {
+pub fn try_decode (bytes: &[u8]) -> Option<(Message, usize)> {
     //yes there are some magic numbers floating around in here... but they're byte manipulations
     let rest = &bytes[4..];
-    match u8_4_to_u32(&bytes[0..4]) {
+    match u8_4_to_u32(&bytes[0..4]) as usize {
         0 => Some((Message::KeepAlive, 4)),
         len => { //len is inclusive of the id byte
             let rest_len = rest.len();
@@ -37,7 +37,7 @@ pub fn try_decode (bytes: &[u8]) -> Option<(Message, u32)> {
                 Some(a) => a
             };
             let message = match *message_type {
-                _ if len > rest.len() as u32 => return None, //the entire envelope is not here yet
+                _ if len > rest.len() => return None, //the entire envelope is not here yet
                 0 => Message::Choke,
                 1 => Message::Unchoke,
                 2 => Message::Interested,
@@ -131,7 +131,7 @@ pub fn decode_message <T> (len_prefix: &[u8], stream: &mut T) -> Message where T
 }
 
 
-//the following two definitions feel clunky. can probably genericize over num bytes somehow
+//this is relatively unsafe
 fn u8_2_to_u16 (bytes: &[u8]) -> u16 {
     (bytes[1] as u16 | (bytes[0] as u16) << 8)
 }

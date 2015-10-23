@@ -12,7 +12,6 @@ use bencode::{deserialize, deserialize_file, Bencode, TypedMethods, BencodeVecOp
 use rand::{Rng, thread_rng};
 use bittorrent::querystring::QueryString;
 use bittorrent::metadata::{MetadataDict, Metadata};
-use bittorrent::bt_messages::decode_message;
 use bittorrent::buffered_reader::BufferedReader;
 use hyper::Client;
 use hyper::header::Connection;

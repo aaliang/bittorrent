@@ -1,3 +1,5 @@
+#![feature(split_off)]
+
 use std::io::Read;
 use std::io::Result;
 use bt_messages::{Message, try_decode};
@@ -24,12 +26,20 @@ impl <T> BufferedReader <T> where T:Read {
                 Ok(bytes_read) => {
                     buffer.extend(i_buff[0..bytes_read].iter());
                     if buffer.len() >= 4 {
-                        let option = try_decode(&buffer);
+                        //try_decode calls read which is a blocking operation, should probably
+                        //combine bt_messages with this
+                        match try_decode(&buffer) {
+                            None => continue,
+                            Some((protocol_message, bytes_consumed)) => {
+                                //TODO: might be able to use self.spare as a slice
+                                self.spare = (&self.spare[bytes_consumed..]).to_owned();
+                                return Ok(protocol_message)
+                            }
+                        }
                     }
                 },
                 Err(err) => return Err(err)
             };
         }
-        Ok(Message::Choke)
     }
 }
