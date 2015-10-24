@@ -7,6 +7,8 @@ use bencode::{deserialize, Bencode, BencodeVecOption, TypedMethods};
 use metadata::{Metadata};
 use querystring::QueryString;
 
+/// Contains functionality required to connect and parse tracker responses
+
 pub const PEER_ID_LENGTH:usize = 20;
 pub const PEER_ID_PREFIX:&'static str = "-TR1000-";
 
@@ -64,4 +66,3 @@ fn get_peers <T> (tracker_response: &T) -> Vec<Address> where T:TypedMethods {
         Address::TCP(ip, port)
     }).collect::<Vec<Address>>()
 }
-
