@@ -3,7 +3,8 @@ extern crate rand;
 extern crate bittorrent;
 
 use std::{env, thread};
-use std::sync::mpsc::channel;
+use std::thread::JoinHandle;
+use std::sync::mpsc::{channel, Sender};
 use bencode::{deserialize_file, Bencode};
 use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::bt_messages::Message;
@@ -20,6 +21,7 @@ struct DefaultHandler;
 /// The default algorithm
 impl Handler for DefaultHandler {
     type MessageType = Message;
+    #[inline]
     fn handle (message: Message) {
         match message {
             _ => println!("{:?}", message)
@@ -27,7 +29,19 @@ impl Handler for DefaultHandler {
     }
 }
 
-fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+/// Sets up a sink pool. it functions as an Actor
+fn init () -> (Sender<Message>, JoinHandle<()>) {
+    let (tx, rx) = channel();
+    let sink = thread::spawn(move|| {
+        loop {
+            DefaultHandler::handle(rx.recv().unwrap())
+        }
+    });
+    (tx, sink)
+}
+
+/// Sets up a transmission based on a single torrent
+fn init_torrent (tx: &Sender<Message>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
         Some(peers) => peers,
@@ -35,18 +49,6 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     };
 
     println!("got {} peers", peers.len());
-
-    let (tx, rx) = channel();
-    //TODO: the sink initialization should be done outside of init() as one sink can realistically
-    //handle multiple torrents relatively trivially
-    //all threads will send messages asynchronously to the sink. tbh the loop could be shoved onto the main
-    //thread, but for the sake of modularity lets dedicated one for the sink
-    let sink = thread::spawn(move || {
-        loop {
-            //for now handle all messages on a single thread. this is similar to the actor pattern
-            DefaultHandler::handle(rx.recv().unwrap());
-        }
-    });
 
     for peer in peers {
         let child_meta = metadata.clone();
@@ -60,7 +62,7 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
                             Ok(message) => {
                                 tx.send((message));
                             },
-                            e @ Err(_) => {
+                            Err(_) => {
                                 println!("error waiting for message");
                             }
                         }
@@ -72,11 +74,9 @@ fn init (metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
             };
         });
     }
-    //block until the sink shuts down
-    let _ = sink.join();
 }
 
-fn start_torrenting () {
+fn main () {
     let path = env::args().nth(1)
                           .unwrap_or_else(||panic!("no path to torrent provided"));
 
@@ -89,9 +89,11 @@ fn start_torrenting () {
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
-    init(&metadata, 6887, 0);
-}
+    let (tx, sink) = init();
 
-fn main () {
-    start_torrenting();
+    //for now initialize torrents inline with main
+    init_torrent(&tx, &metadata, 6887, 0);
+
+    //block until the sink shuts down
+    let _ = sink.join();
 }
