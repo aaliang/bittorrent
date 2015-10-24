@@ -10,3 +10,4 @@ pub mod querystring;
 pub mod metadata;
 pub mod tracker;
 pub mod peer;
+pub mod default_handler;

@@ -5,43 +5,30 @@ extern crate bittorrent;
 use std::{env, thread};
 use std::thread::JoinHandle;
 use std::sync::mpsc::{channel, Sender};
+use std::sync::Arc;
+use std::ops::Deref;
 use bencode::{deserialize_file, Bencode};
 use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::bt_messages::Message;
-use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX, PEER_ID_LENGTH};
+use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
 use bittorrent::peer::{connect_to_peer, gen_rand_peer_id};
-
-/// Handles messages. This is a cheap way to force reactive style
-trait Handler {
-    type MessageType;
-    fn handle(message: Self::MessageType);
-}
-
-struct DefaultHandler;
-/// The default algorithm
-impl Handler for DefaultHandler {
-    type MessageType = Message;
-    #[inline]
-    fn handle (message: Message) {
-        match message {
-            _ => println!("{:?}", message)
-        }
-    }
-}
+use bittorrent::default_handler::{Handler, DefaultHandler};
 
 /// Sets up a sink pool. it functions as an Actor
-fn init () -> (Sender<Message>, JoinHandle<()>) {
+/// atm, rust doesn't support HKTs
+fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<String>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
         loop {
-            DefaultHandler::handle(rx.recv().unwrap())
+            let (message, cell): (Message, Arc<String>) = rx.recv().unwrap();
+            handler.handle(message, cell.deref());
         }
     });
     (tx, sink)
 }
 
 /// Sets up a transmission based on a single torrent
-fn init_torrent (tx: &Sender<Message>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+fn init_torrent (tx: &Sender<(Message, Arc<String>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
         Some(peers) => peers,
@@ -57,10 +44,15 @@ fn init_torrent (tx: &Sender<Message>, metadata: &Metadata, listen_port: u32, by
         thread::spawn(move || {
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((ref peer_id, ref mut reader)) => {
+                    let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
+                    let c = Arc::new(peer_id_str);
                     loop {
                         match reader.wait_for_message() {
                             Ok(message) => {
-                                tx.send((message));
+                                //cannot figure out how to get the borrow checker to stop yelling
+                                //at me about sending a string borrow... for now send an owned
+                                //string. not even sure if its possible not to
+                                let _ = tx.send((message, c.clone()));
                             },
                             Err(_) => {
                                 println!("error waiting for message");
@@ -89,7 +81,7 @@ fn main () {
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
-    let (tx, sink) = init();
+    let (tx, sink) = init(DefaultHandler::new());
 
     //for now initialize torrents inline with main
     init_torrent(&tx, &metadata, 6887, 0);

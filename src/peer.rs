@@ -5,7 +5,7 @@ use metadata::Metadata;
 use buffered_reader::BufferedReader;
 use tracker::{Address, PEER_ID_LENGTH};
 
-/// Contains functionality required to setup a connection to a peer
+/// Contains functionality required to setup and exchange messages with a peer
 
 pub fn gen_rand_peer_id (prefix: &str) -> String {
     let rand_length = PEER_ID_LENGTH - prefix.len();
@@ -14,26 +14,6 @@ pub fn gen_rand_peer_id (prefix: &str) -> String {
                            .collect::<String>();
 
     prefix.to_string() + &rand
-}
-
-/// The peer handshake message, according to protocol
-///
-fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
-    let reserved = [0u8; 8];
-    let pstr_bytes = pstr.to_string().into_bytes();
-    let a = [pstr_bytes.len() as u8];
-    let b = pstr_bytes;
-    let c = reserved;
-    let d = info_hash;
-    let e = peer_id.clone().into_bytes();
-
-    [a.iter(),
-     b.iter(),
-     c.iter(),
-     d.iter(),
-     e.iter()].iter().flat_map(|y| {
-         y.to_owned().map(|x| *x).collect::<Vec<u8>>()
-     }).collect::<Vec<u8>>()
 }
 
 pub fn decode_handshake(resp: &[u8]) -> (&[u8], &[u8], &[u8], &[u8], &[u8]){
@@ -84,3 +64,25 @@ pub fn connect_to_peer (address: Address, metadata: &Metadata, peer_id: &String)
         Err(_) => Err(format!("unable to read from peer {:?}", ip))
     }
 }
+
+
+/// The peer handshake message, according to protocol
+///
+fn to_handshake (pstr:&str, info_hash: &[u8; 20], peer_id: &String) -> Vec<u8> {
+    let reserved = [0u8; 8];
+    let pstr_bytes = pstr.to_string().into_bytes();
+    let a = [pstr_bytes.len() as u8];
+    let b = pstr_bytes;
+    let c = reserved;
+    let d = info_hash;
+    let e = peer_id.clone().into_bytes();
+
+    [a.iter(),
+     b.iter(),
+     c.iter(),
+     d.iter(),
+     e.iter()].iter().flat_map(|y| {
+         y.to_owned().map(|x| *x).collect::<Vec<u8>>()
+     }).collect::<Vec<u8>>()
+}
+

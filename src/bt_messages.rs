@@ -1,8 +1,6 @@
-use std::io::Read;
-use std::io::Result;
-
 #[derive(Debug)]
 pub enum Message {
+    //peer messages according to protocol
     KeepAlive,
     Choke,
     Unchoke,
@@ -14,7 +12,9 @@ pub enum Message {
     Piece {index: u32, begin: u32, block: Vec<u8>},
     Cancel {index: u32, begin: u32, length: u32},
     Port(u16),
-    Unhandled
+    //internally used messages
+    Handshake,
+    Unhandled,
 }
 
 /// Tries to decode a message according to the bittorrent protocol from a slice of bytes
@@ -32,7 +32,6 @@ pub fn try_decode (bytes: &[u8]) -> Option<(Message, usize)> {
     match u8_4_to_u32(&bytes[0..4]) as usize {
         0 => Some((Message::KeepAlive, 4)),
         len => { //len is inclusive of the id byte
-            let rest_len = rest.len();
             let message_type = match rest.first() {
                 None => return None,
                 Some(a) => a
@@ -73,6 +72,19 @@ pub fn try_decode (bytes: &[u8]) -> Option<(Message, usize)> {
         }
     }
 }
+
+//this is relatively unsafe
+fn u8_2_to_u16 (bytes: &[u8]) -> u16 {
+    (bytes[1] as u16 | (bytes[0] as u16) << 8)
+}
+
+fn u8_4_to_u32 (bytes: &[u8]) -> u32 {
+    (bytes[3] as u32
+        | ((bytes[2] as u32) << 8)
+        | ((bytes[1] as u32) << 16)
+        | ((bytes[0] as u32) << 24))
+}
+/* DEPRECATED
 ///len_prefix is big endian
 ///might want to use traits instead of returning an enum... haven't decided yet. would save a match
 pub fn decode_message <T> (len_prefix: &[u8], stream: &mut T) -> Message where T:Read {
@@ -131,19 +143,6 @@ pub fn decode_message <T> (len_prefix: &[u8], stream: &mut T) -> Message where T
     }
 }
 
-
-//this is relatively unsafe
-fn u8_2_to_u16 (bytes: &[u8]) -> u16 {
-    (bytes[1] as u16 | (bytes[0] as u16) << 8)
-}
-
-fn u8_4_to_u32 (bytes: &[u8]) -> u32 {
-    (bytes[3] as u32
-        | ((bytes[2] as u32) << 8)
-        | ((bytes[1] as u32) << 16)
-        | ((bytes[0] as u32) << 24))
-}
-
 //reads into a fixed length u32
 fn read_word <T> (stream: &mut T) -> u32 where T:Read {
     let mut buf = [0; 4];
@@ -156,25 +155,7 @@ fn read_out_variable <T> (stream: &mut T, num_bytes: u64) -> Vec<u8> where T:Rea
     stream.take(num_bytes).read(&mut buf);
     buf
 }
-
-pub fn test () {
-    struct MockStream;
-
-    impl Read for MockStream {
-        fn read (&mut self, buf: &mut [u8]) -> Result<usize> {
-            buf[0] = 0;
-            buf[1] = 0;
-            buf[2] = 0;
-            buf[3] = 0;
-            Ok(4)
-        }
-    }
-
-    let mut stream = MockStream;
-    let mut buf = [1; 4];
-    stream.read(&mut buf);
-    decode_message(&buf, &mut stream);
-}
+*/
 
 #[test]
 fn test_decode () {
