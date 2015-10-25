@@ -8,6 +8,8 @@ A ground up implementation of a bittorrent client using rust. This is still unfi
 3. It is able to connect via TCP to peers
 4. It is able to handshake with peers
 5. Decodes messages from streams (Read implementers)
+6. Handles messages reactively
+7. Concurrently reads and writes from TCP sockets
 
 With the exception of the combine parser, random, and url library this is done completely using core rust (1.3.0)
 Included as a local dependency is a standalone bencode crate which provides facilities for deserializing byte streams to objects and serializing back to bytes. This is built on top of the combine library and extends the combinators by adding a 'take' combinator as well as its 'SizedBuffer' companion perhaps someday I will submit a PR back to combine :). By itself it takes almost 10 seconds to compile, which is part of the reason why it's in its own crate.
