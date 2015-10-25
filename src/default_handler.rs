@@ -11,22 +11,19 @@ pub trait Handler {
 
 pub struct DefaultHandler {
     //the global piece count
-    gpc: Vec<u16>
+    gpc: Vec<u16>,
+    //pieces owned by self. (as a bitfield)
+    owned: Vec<u8>
 }
 
 impl DefaultHandler {
     pub fn new () -> DefaultHandler {
         DefaultHandler {
-            gpc: vec![]
+            gpc: vec![],
+            owned: vec![]
         }
     }
 }
-
-pub enum Action {
-    None,
-    Respond(Vec<u8>)
-}
-
 
 /// The default algorithm
 impl Handler for DefaultHandler {
@@ -55,19 +52,14 @@ impl Handler for DefaultHandler {
 
 pub struct Peer {
     pub id: String,
-    pub chan: Sender<Action>,
     stream: TcpStream,
     state: State
-}
-
-impl Peer {
-    fn find_next_piece (&self) {
-    }
 }
 
 #[derive(Debug)]
 struct State {
     choked: bool,
+    interested: bool,
     //the intention is that eventually we will support growable files. so going with vector
     bitfield: Vec<u8>
 }
@@ -78,18 +70,7 @@ impl State {
     }
 
     fn set_have (&mut self, index: usize) {
-        //lets say i have index 500 -> how do i bitwise over a u8 array?
-        let chunk_index = index/8;
-        let chunk_posit = index % 8;
-        let chunk_mask = 128 >> chunk_posit;
-
-        //bounds check needs to be here because the bitfield is a variable size - which we want in
-        //the future
-        if chunk_index+1 > self.bitfield.len() {
-            self.bitfield.extend((0..chunk_index).map(|_| 0 as u8));
-        }
-
-        self.bitfield[chunk_index] = self.bitfield[chunk_index] | chunk_mask;
+        set_have_bitfield(&mut self.bitfield, index);
     }
 
     fn set_choked (&mut self, choked: bool) {
@@ -97,14 +78,29 @@ impl State {
     }
 }
 
+fn set_have_bitfield (bitfield: &mut Vec<u8>, index: usize) {
+    //lets say i have index 500 -> how do i bitwise over a u8 array?
+    let chunk_index = index/8;
+    let chunk_posit = index % 8;
+    let chunk_mask = 128 >> chunk_posit;
+
+    //bounds check needs to be here because the bitfield is a variable size - which we want in
+    //the future
+    if chunk_index+1 > bitfield.len() {
+        bitfield.extend((0..chunk_index).map(|_| 0 as u8));
+    }
+
+    bitfield[chunk_index] = bitfield[chunk_index] | chunk_mask;
+}
+
 impl Peer {
-    pub fn new (id:String, chan: Sender<Action>, stream: TcpStream) -> Peer {
+    pub fn new (id:String, stream: TcpStream) -> Peer {
         Peer {
             id: id,
-            chan: chan,
             stream: stream,
             state: State {
                 choked: true,
+                interested: false,
                 bitfield: Vec::new()
             }
         }
@@ -115,6 +111,7 @@ impl Peer {
 fn test_set_have_singleton_bitfield() {
     let mut state = State {
         choked: false,
+        interested: false,
         bitfield: vec![0]
     };
     state.set_have(2);
@@ -126,6 +123,7 @@ fn test_set_have_singleton_bitfield() {
 fn test_set_have_longer_bitfiled() {
     let mut state = State {
         choked: false,
+        interested: false,
         bitfield: vec![0, 0, 0, 0]
     };
     state.set_have(23);
@@ -134,4 +132,20 @@ fn test_set_have_longer_bitfiled() {
     assert_eq!(state.bitfield[1], 0);
     assert_eq!(state.bitfield[2], 1);
     assert_eq!(state.bitfield[3], 0);
+}
+
+#[test]
+fn test_set_have_out_of_bounds() {
+    let mut state = State {
+        choked: false,
+        interested: false,
+        bitfield: vec![0, 1]
+    };
+
+    state.set_have(31);
+
+    assert_eq!(state.bitfield[0], 0);
+    assert_eq!(state.bitfield[1], 1);
+    assert_eq!(state.bitfield[2], 0);
+    assert_eq!(state.bitfield[3], 1);
 }

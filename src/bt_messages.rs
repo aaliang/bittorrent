@@ -36,7 +36,7 @@ impl Message {
                 vec![0, 0, 0, 1, 2]
             },
             &Message::Have{piece_index: p} => {
-                let r: [u8; 4] = unsafe {transmute(p)};
+                let r: [u8; 4] = unsafe {transmute(p.to_be())};
                 vec![0, 0, 0, 5, r[0], r[1], r[2], r[3]]
             },
             _ => {
@@ -113,6 +113,16 @@ fn u8_4_to_u32 (bytes: &[u8]) -> u32 {
         | ((bytes[2] as u32) << 8)
         | ((bytes[1] as u32) << 16)
         | ((bytes[0] as u32) << 24))
+}
+
+#[test]
+fn test_have_message () {
+    let a_message = Message::Have{piece_index: 400};
+
+    let a = a_message.to_byte_array();
+
+    assert_eq!(a, vec![0, 0, 0, 5, 0, 1, 0, 0]);
+
 }
 
 /*#[test]

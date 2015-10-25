@@ -13,7 +13,7 @@ use bittorrent::bt_messages::Message;
 use bittorrent::buffered_reader::BufferedReader;
 use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
 use bittorrent::peer::{connect_to_peer, gen_rand_peer_id};
-use bittorrent::default_handler::{Handler, DefaultHandler, Peer, Action};
+use bittorrent::default_handler::{Handler, DefaultHandler, Peer};
 
 // Sets up a sink pool. it functions similarly to an Actor
 /// atm, rust doesn't support HKTs
@@ -25,9 +25,7 @@ fn init <'a> (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>
             let mut peer_mut_guard = cell.deref().lock().unwrap();
             let mut peer = peer_mut_guard.deref_mut();
 
-            let action = handler.handle(message, peer);
-
-            //peer.chan.send(action);
+            let _ = handler.handle(message, peer);
         }
     });
     (tx, sink)
@@ -51,11 +49,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
-                    //requests need a response - use a second channel to accomplish this
-                    //TODO - actually this is most likely no longer true. keep it around for now
-                    //in case i change my mind
-                    let (btx, brx) = channel();
-                    let arc = Arc::new(Mutex::new(Peer::new(peer_id_str, btx, reader.clone_stream())));
+                    let arc = Arc::new(Mutex::new(Peer::new(peer_id_str, reader.clone_stream())));
                     loop {
                         //we can't just block read in a loop - we'll never have a chance to send out
                         //outgoing messages over TCP
