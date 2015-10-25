@@ -49,7 +49,12 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
-                    let arc = Arc::new(Mutex::new(Peer::new(peer_id_str, reader.clone_stream())));
+                    let mut peer = Peer::new(peer_id_str, reader.clone_stream());
+                    
+                    peer.send_message(Message::Interested);
+                    peer.state.set_us_interested(true);
+
+                    let arc = Arc::new(Mutex::new(peer));
                     loop {
                         //we can't just block read in a loop - we'll never have a chance to send out
                         //outgoing messages over TCP

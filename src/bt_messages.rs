@@ -20,9 +20,24 @@ pub enum Message {
 }
 
 //this is kind of lazy. but it also makes reading/writing Messages symmetrical...
+//yes it introduces branching but the overhead is not significant
+//this hardcoding isn't going to do me any favors... but the spec won't change
+//if i want to extend the protocol i'll come up with a generalizable version
 impl Message {
-    fn to_byte_array (&self) -> Vec<u8> {
+    pub fn to_byte_array (&self) -> Vec<u8> {
         match self {
+            &Message::Request{index: i, begin: b, length: l} => {
+                let mut fixed_part = vec![0, 0, 0, 13, 6];
+                let (i_b, b_b, l_b):([u8;4], [u8;4], [u8;4]) = unsafe {
+                    (transmute(i.to_be()),
+                     transmute(b.to_be()),
+                     transmute(l.to_be()))
+                };
+                fixed_part.extend(i_b.iter());
+                fixed_part.extend(b_b.iter());
+                fixed_part.extend(l_b.iter());
+                fixed_part
+            },
             &Message::KeepAlive => {
                 vec![0, 0, 0, 0]
             }
@@ -38,6 +53,21 @@ impl Message {
             &Message::Have{piece_index: p} => {
                 let r: [u8; 4] = unsafe {transmute(p.to_be())};
                 vec![0, 0, 0, 5, 4, r[0], r[1], r[2], r[3]]
+            },
+            &Message::Bitfield(bitfield) => {
+                bitfield
+            },
+            &Message::Cancel{index: i, begin: b, length: l} => {
+                let mut fixed_part = vec![0, 0, 0, 13, 8];
+                let (i_b, b_b, l_b):([u8;4], [u8;4], [u8;4]) = unsafe {
+                    (transmute(i.to_be()),
+                     transmute(b.to_be()),
+                     transmute(l.to_be()))
+                };
+                fixed_part.extend(i_b.iter());
+                fixed_part.extend(b_b.iter());
+                fixed_part.extend(l_b.iter());
+                fixed_part
             },
             _ => {
                 vec![]
@@ -125,9 +155,19 @@ fn test_have_message () {
 
     let (message, _) = try_decode(&a).unwrap();
 
-    assert_eq!(message, Message::Have{piece_index:400});
+    assert_eq!(message, a_message);
+}
 
+#[test]
+fn test_request_message () {
+    let a_message = Message::Request{index: 3, begin: 257, length: 1799};
+    let a = a_message.to_byte_array();
 
+    assert_eq!(a, vec![0, 0, 0, 13, 6, 0, 0, 0, 3, 0, 0, 1, 1, 0, 0, 7, 7]);
+
+    let (message, _) = try_decode(&a).unwrap();
+
+    assert_eq!(message, a_message);
 }
 
 /*#[test]
