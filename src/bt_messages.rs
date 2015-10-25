@@ -1,6 +1,6 @@
 use std::mem::transmute;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Message {
     //peer messages according to protocol
     KeepAlive,
@@ -37,7 +37,7 @@ impl Message {
             },
             &Message::Have{piece_index: p} => {
                 let r: [u8; 4] = unsafe {transmute(p.to_be())};
-                vec![0, 0, 0, 5, r[0], r[1], r[2], r[3]]
+                vec![0, 0, 0, 5, 4, r[0], r[1], r[2], r[3]]
             },
             _ => {
                 vec![]
@@ -121,7 +121,12 @@ fn test_have_message () {
 
     let a = a_message.to_byte_array();
 
-    assert_eq!(a, vec![0, 0, 0, 5, 0, 0, 1, 144]);
+    assert_eq!(a, vec![0, 0, 0, 5, 4, 0, 0, 1, 144]);
+
+    let (message, _) = try_decode(&a).unwrap();
+
+    assert_eq!(message, Message::Have{piece_index:400});
+
 
 }
 
