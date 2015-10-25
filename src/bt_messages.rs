@@ -121,7 +121,7 @@ fn test_have_message () {
 
     let a = a_message.to_byte_array();
 
-    assert_eq!(a, vec![0, 0, 0, 5, 0, 1, 0, 0]);
+    assert_eq!(a, vec![0, 0, 0, 5, 0, 0, 1, 144]);
 
 }
 
