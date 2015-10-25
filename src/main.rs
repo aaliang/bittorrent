@@ -13,33 +13,28 @@ use bittorrent::bt_messages::Message;
 use bittorrent::buffered_reader::BufferedReader;
 use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
 use bittorrent::peer::{connect_to_peer, gen_rand_peer_id};
-use bittorrent::default_handler::{Handler, DefaultHandler};
+use bittorrent::default_handler::{Handler, DefaultHandler, Peer, Action};
 
-struct PeerState {
-    id: String,
-    chan: Sender<u32>
-}
-
-/// Sets up a sink pool. it functions as an Actor
+// Sets up a sink pool. it functions similarly to an Actor
 /// atm, rust doesn't support HKTs
-fn init <'a> (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<PeerState>>)>, JoinHandle<()>) {
+fn init <'a> (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
         loop {
-            let (message, cell): (Message, Arc<Mutex<PeerState>>) = rx.recv().unwrap();
-            let f = cell.deref().lock().unwrap();
-            let g = f.deref();
-            g.chan.send(3);
+            let (message, cell): (Message, Arc<Mutex<Peer>>) = rx.recv().unwrap();
+            let mut peer_mut_guard = cell.deref().lock().unwrap();
+            let mut peer = peer_mut_guard.deref_mut();
 
-            println!("{:?}", g.id);
-            handler.handle(message);
+            let action = handler.handle(message, peer);
+
+            peer.chan.send(action);
         }
     });
     (tx, sink)
 }
 
 /// Sets up a transmission based on a single torrent
-fn init_torrent (tx: &Sender<(Message, Arc<Mutex<PeerState>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
         Some(peers) => peers,
@@ -56,17 +51,18 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<PeerState>>)>, metadata: &Metad
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
-                    //requests need a response - use channels to accomplish this
+                    //requests need a response - use a second channel to accomplish this
                     let (btx, brx) = channel();
-                    let arc = Arc::new(Mutex::new(PeerState {id: peer_id_str, chan: btx}));
+                    let arc = Arc::new(Mutex::new(Peer::new(peer_id_str, btx, reader.clone_stream())));
                     loop {
-                        //we can't just block in a loop - we'll never have a chance to send out
+                        //we can't just block read in a loop - we'll never have a chance to send out
                         //outgoing messages over TCP
                         match reader.wait_for_message() {
                             Ok(message) => {
                                 //this is an ask - expects a message
                                 let _ = tx.send((message, arc.clone()));
                                 match brx.recv().unwrap() {
+                                    Action::None => println!("do nothing"),
                                     _ => println!("freed")
                                 }
                             },

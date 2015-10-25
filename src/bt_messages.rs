@@ -1,3 +1,5 @@
+use std::mem::transmute;
+
 #[derive(Debug)]
 pub enum Message {
     //peer messages according to protocol
@@ -15,6 +17,34 @@ pub enum Message {
     //internally used messages
     Handshake,
     Unhandled,
+}
+
+//this is kind of lazy. but it also makes reading/writing Messages symmetrical...
+impl Message {
+    fn to_byte_array (&self) -> Vec<u8> {
+        match self {
+            &Message::KeepAlive => {
+                vec![0, 0, 0, 0]
+            }
+            &Message::Choke => {
+                vec![0, 0, 0, 1, 0]
+            },
+            &Message::Unchoke => {
+                vec![0, 0, 0, 1, 1]
+            },
+            &Message::Interested => {
+                vec![0, 0, 0, 1, 2]
+            },
+            &Message::Have{piece_index: p} => {
+                let r: [u8; 4] = unsafe {transmute(p)};
+                vec![0, 0, 0, 5, r[0], r[1], r[2], r[3]]
+            },
+            _ => {
+                vec![]
+            }
+
+        }
+    }
 }
 
 /// Tries to decode a message according to the bittorrent protocol from a slice of bytes
@@ -84,78 +114,6 @@ fn u8_4_to_u32 (bytes: &[u8]) -> u32 {
         | ((bytes[1] as u32) << 16)
         | ((bytes[0] as u32) << 24))
 }
-/* DEPRECATED
-///len_prefix is big endian
-///might want to use traits instead of returning an enum... haven't decided yet. would save a match
-pub fn decode_message <T> (len_prefix: &[u8], stream: &mut T) -> Message where T:Read {
-    let i = u8_4_to_u32(len_prefix);
-    match i {
-        0 => Message::KeepAlive,
-        len => {
-            let mut id_buf = [0; 1];
-            let _ = stream.read(&mut id_buf);
-            match id_buf[0] {
-                0 => Message::Choke,
-                1 => Message::Unchoke,
-                2 => Message::Interested,
-                3 => Message::NotInterested,
-                4 => {
-                    let piece_index = read_word(stream);
-                    Message::Have{piece_index: piece_index}
-                },
-                5 => {
-                    let bitfield_length = len - 1;
-                    Message::Bitfield(read_out_variable(stream, bitfield_length as u64))
-                },
-                6 => {
-                    //so much for referential transparency... ah my eyes!
-                    let index = read_word(stream);
-                    let begin = read_word(stream);
-                    let length = read_word(stream);
-                    Message::Request{index: index, begin: begin, length: length}
-                },
-                7 => {
-                    let block_length = len - 9;
-                    //TODO: for the sake of semi-immutability maybe it would be prettier if we
-                    //consume from the stream in one operation, then partition the slice up
-                    //appropriately after
-                    let index = read_word(stream);
-                    let begin = read_word(stream);
-                    let block = read_out_variable(stream, block_length as u64);
-                    Message::Piece{index: index, begin: begin, block: block}
-                },
-                8 => {
-                    let index = read_word(stream);
-                    let begin = read_word(stream);
-                    let length = read_word(stream);
-                    Message::Cancel{index: index, begin: begin, length: length}
-                },
-                9 =>{
-                    let mut buf = [0; 2];
-                    stream.read(&mut buf);
-                    let port = u8_2_to_u16(&buf);
-                    Message::Port(port)
-                }
-                _ => Message::Unhandled
-            }
-
-        }
-    }
-}
-
-//reads into a fixed length u32
-fn read_word <T> (stream: &mut T) -> u32 where T:Read {
-    let mut buf = [0; 4];
-    stream.read(&mut buf);
-    u8_4_to_u32(&buf)
-}
-
-fn read_out_variable <T> (stream: &mut T, num_bytes: u64) -> Vec<u8> where T:Read {
-    let mut buf = Vec::new();
-    stream.take(num_bytes).read(&mut buf);
-    buf
-}
-*/
 
 #[test]
 fn test_decode () {

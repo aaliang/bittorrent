@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::io::Result;
+use std::net::TcpStream;
 use bt_messages::{Message, try_decode};
 
 pub struct BufferedReader <T> where T: Read {
@@ -38,5 +39,11 @@ impl <T> BufferedReader <T> where T:Read {
                 Err(err) => return Err(err)
             };
         }
+    }
+}
+
+impl BufferedReader <TcpStream> {
+    pub fn clone_stream (&self) -> TcpStream {
+        self.readable.try_clone().unwrap()
     }
 }
