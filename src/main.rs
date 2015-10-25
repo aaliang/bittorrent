@@ -1,34 +1,45 @@
 extern crate bencode;
-extern crate rand;
 extern crate bittorrent;
 
 use std::{env, thread};
 use std::thread::JoinHandle;
 use std::sync::mpsc::{channel, Sender};
-use std::sync::Arc;
-use std::ops::Deref;
+use std::sync::{Arc, Mutex};
+use std::net::TcpStream;
+use std::ops::{Deref, DerefMut};
 use bencode::{deserialize_file, Bencode};
 use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::bt_messages::Message;
+use bittorrent::buffered_reader::BufferedReader;
 use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
 use bittorrent::peer::{connect_to_peer, gen_rand_peer_id};
 use bittorrent::default_handler::{Handler, DefaultHandler};
 
+struct PeerState {
+    id: String,
+    chan: Sender<u32>
+}
+
 /// Sets up a sink pool. it functions as an Actor
 /// atm, rust doesn't support HKTs
-fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<String>)>, JoinHandle<()>) {
+fn init <'a> (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<PeerState>>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
         loop {
-            let (message, cell): (Message, Arc<String>) = rx.recv().unwrap();
-            handler.handle(message, cell.deref());
+            let (message, cell): (Message, Arc<Mutex<PeerState>>) = rx.recv().unwrap();
+            let f = cell.deref().lock().unwrap();
+            let g = f.deref();
+            g.chan.send(3);
+
+            println!("{:?}", g.id);
+            handler.handle(message);
         }
     });
     (tx, sink)
 }
 
 /// Sets up a transmission based on a single torrent
-fn init_torrent (tx: &Sender<(Message, Arc<String>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+fn init_torrent (tx: &Sender<(Message, Arc<Mutex<PeerState>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
         Some(peers) => peers,
@@ -43,21 +54,26 @@ fn init_torrent (tx: &Sender<(Message, Arc<String>)>, metadata: &Metadata, liste
         let tx = tx.clone();
         thread::spawn(move || {
             match connect_to_peer(peer, &child_meta, &peer_id) {
-                Ok((ref peer_id, ref mut reader)) => {
+                Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
-                    let c = Arc::new(peer_id_str);
+                    //requests need a response - use channels to accomplish this
+                    let (btx, brx) = channel();
+                    let arc = Arc::new(Mutex::new(PeerState {id: peer_id_str, chan: btx}));
                     loop {
+                        //we can't just block in a loop - we'll never have a chance to send out
+                        //outgoing messages over TCP
                         match reader.wait_for_message() {
                             Ok(message) => {
-                                //cannot figure out how to get the borrow checker to stop yelling
-                                //at me about sending a string borrow... for now send an owned
-                                //string. not even sure if its possible not to
-                                let _ = tx.send((message, c.clone()));
+                                //this is an ask - expects a message
+                                let _ = tx.send((message, arc.clone()));
+                                match brx.recv().unwrap() {
+                                    _ => println!("freed")
+                                }
                             },
                             Err(_) => {
                                 println!("error waiting for message");
                             }
-                        }
+                        };
                     }
                 },
                 Err(e) => {
