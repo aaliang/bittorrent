@@ -27,7 +27,7 @@ fn init <'a> (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>
 
             let action = handler.handle(message, peer);
 
-            peer.chan.send(action);
+            //peer.chan.send(action);
         }
     });
     (tx, sink)
@@ -52,6 +52,8 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
                 Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
                     //requests need a response - use a second channel to accomplish this
+                    //TODO - actually this is most likely no longer true. keep it around for now
+                    //in case i change my mind
                     let (btx, brx) = channel();
                     let arc = Arc::new(Mutex::new(Peer::new(peer_id_str, btx, reader.clone_stream())));
                     loop {
@@ -59,12 +61,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
                         //outgoing messages over TCP
                         match reader.wait_for_message() {
                             Ok(message) => {
-                                //this is an ask - expects a message
                                 let _ = tx.send((message, arc.clone()));
-                                match brx.recv().unwrap() {
-                                    Action::None => println!("do nothing"),
-                                    _ => println!("freed")
-                                }
                             },
                             Err(_) => {
                                 println!("error waiting for message");
