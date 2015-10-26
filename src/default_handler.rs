@@ -30,6 +30,35 @@ impl DefaultHandler {
             request_map: vec![]
         }
     }
+
+    /// returns a complete bitfield of pieces that aren't owned or being requested
+    /// this is done almost as strictly as possible - and might be a little of a waste as it isn't
+    /// really necessary to get a complete picture to get a request chunk
+    /// additionally the definitions of owned and request_map are not strict yet - currently they
+    /// are growable, and impelementers should take note of that
+    pub fn unclaimed_field (&self) -> Vec<u8> {
+        if self.owned.len() == self.request_map.len() {
+            DefaultHandler::nand_slice(&self.owned, &self.request_map)
+        } else {
+            if self.owned.len() < self.request_map.len() {
+                let mut vec = DefaultHandler::nand_slice(&self.request_map[..self.owned.len()], &self.owned);
+                vec.extend((0..self.request_map.len()-self.owned.len()).map(|_| 0));
+                vec
+            } else {
+                let mut vec = DefaultHandler::nand_slice(&self.request_map, &self.owned[..self.request_map.len()]);
+                vec.extend((0..self.owned.len()-self.request_map.len()).map(|_| 0));
+                vec
+            }
+        }
+    }
+
+    #[inline]
+    pub fn nand_slice (lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
+        assert!(lhs.len() == rhs.len());
+        lhs.iter().zip(rhs)
+                  .map(|(a, b)| !a & !b)
+                  .collect::<Vec<u8>>()
+    }
 }
 
 /// The default algorithm

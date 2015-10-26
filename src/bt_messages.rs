@@ -13,10 +13,7 @@ pub enum Message {
     Request {index: u32, begin: u32, length: u32},
     Piece {index: u32, begin: u32, block: Vec<u8>},
     Cancel {index: u32, begin: u32, length: u32},
-    Port(u16),
-    //internally used messages
-    Handshake,
-    Unhandled,
+    Port(u16)
 }
 
 //this is kind of lazy. but it also makes reading/writing Messages symmetrical...
@@ -54,8 +51,9 @@ impl Message {
                 let r: [u8; 4] = unsafe {transmute(p.to_be())};
                 vec![0, 0, 0, 5, 4, r[0], r[1], r[2], r[3]]
             },
-            &Message::Bitfield(bitfield) => {
-                bitfield
+            &Message::Bitfield(ref bitfield) => {
+                //there is no point for this
+                bitfield.to_owned()
             },
             &Message::Cancel{index: i, begin: b, length: l} => {
                 let mut fixed_part = vec![0, 0, 0, 13, 8];
