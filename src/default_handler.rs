@@ -43,25 +43,62 @@ impl DefaultHandler {
         self.gpc[piece_index] += n;
     }
 
+    /// Returns the index of the rarest piece that isn't owned or currently being requested.
+    /// TODO: Approximations may yield optimized results
+    #[inline]
+    pub fn rarest (&self) -> Option<usize> {
+        //there's probably a faster way. doing this naively for the sake of forward progress
+        let mut most_rare = (None, u16::max_value());
+        for (index, byte) in self.unclaimed_fields().iter().enumerate() {
+            for i in 0..8 { //cast up so i don't have to deal with overflows
+                let n = 1 & (((*byte as u16) << i) >> (8-i));
+                if n == 1 {
+                    let true_index = index*8+1;
+                    let population = self.gpc[true_index];
+                    let (_, mr_pop) = most_rare;
+                    if population < mr_pop {
+                        most_rare = (Some(true_index), population)
+                    }
+                }
+            }
+        }
+        let (index, _) = most_rare;
+        index
+    }
+
+    /// Returns the index of the rarest piece that is owned by the peer and isn't both owned
+    /// and currently being requested
+    /// TODO: Approximations may yield optimized results
+    #[inline]
+    pub fn rarest_wrt_peer (&self, peer_bitfield: &Vec<u8>) -> Option<usize> {
+        //there's probably a faster way. doing this naively for the sake of forward progress
+        let mut most_rare = (None, u16::max_value());
+        let eligible = and_slice_vbr_len(&self.unclaimed_fields(), &peer_bitfield);
+        for (index, byte) in eligible.iter().enumerate() {
+            for i in 0..8 { //cast up so i don't have to deal with overflows
+                let n = 1 & (((*byte as u16) << i) >> (8-i));
+                if n == 1 {
+                    let true_index = index*8+1;
+                    let population = self.gpc[true_index];
+                    let (_, mr_pop) = most_rare;
+                    if population < mr_pop {
+                        most_rare = (Some(true_index), population)
+                    }
+                }
+            }
+        }
+        let (index, _) = most_rare;
+        index
+    }
+
     /// returns a complete bitfield of pieces that aren't owned or being requested
     /// this is done almost as strictly as possible - and might be a little of a waste as it isn't
     /// really necessary to get a complete picture to get a request chunk
     /// additionally the definitions of owned and request_map are not strict yet - currently they
     /// are growable, and impelementers should take note of that
+    #[inline]
     pub fn unclaimed_fields (&self) -> Vec<u8> {
-        if self.owned.len() == self.request_map.len() {
-            nand_slice(&self.owned, &self.request_map)
-        } else {
-            if self.owned.len() < self.request_map.len() {
-                let mut vec = nand_slice(&self.request_map[..self.owned.len()], &self.owned);
-                vec.extend((0..self.request_map.len()-self.owned.len()).map(|_| 255));
-                vec
-            } else {
-                let mut vec = nand_slice(&self.request_map, &self.owned[..self.request_map.len()]);
-                vec.extend((0..self.owned.len()-self.request_map.len()).map(|_| 255));
-                vec
-            }
-        }
+        nand_slice_vbr_len(&self.owned, &self.request_map)
     }
 }
 
@@ -90,7 +127,7 @@ impl Handler for DefaultHandler {
                 for (index, byte) in bitfield.iter().enumerate() {
                     for i in 0..8 { //cast up so i don't have to deal with overflows
                         let n = 1 & (((*byte as u16) << i) >> (8-i));
-                        self.gpc_incr(index*8+i, n & 255);
+                        self.gpc_incr(index*8+i, n);
                     }
                 }
                 peer.state.set_bitfield(bitfield);
@@ -196,20 +233,50 @@ fn set_have_bitfield (bitfield: &mut Vec<u8>, index: usize) {
     bitfield[chunk_index] = bitfield[chunk_index] | chunk_mask;
 }
 
-
+/// Zip-maps a generic func over two byte slices with variable lengths
 #[inline]
-pub fn nand_slice (lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
+pub fn apply_bitwise_slice_vbr_len <F, T:Clone> (lhs: &[T], rhs: &[T], default: T, func: F) -> Vec<T>
+    where F: Fn((&T, &T)) -> T {
+    if lhs.len() == rhs.len() {
+        bitwise_byte_slice(lhs, rhs, func)
+    } else {
+        if lhs.len() < rhs.len() {
+            let mut vec = bitwise_byte_slice(&rhs[..lhs.len()], lhs, func);
+            vec.extend((0..rhs.len()-lhs.len()).map(|_| default.clone()));
+            vec
+        } else {
+            let mut vec = bitwise_byte_slice(rhs, &lhs[..rhs.len()], func);
+            vec.extend((0..lhs.len()-rhs.len()).map(|_| default.clone()));
+            vec
+        }
+    }
+}
+
+/// Zip-maps a generic func (intended bitwise) over two byte slices
+#[inline]
+pub fn bitwise_byte_slice <F, T> (lhs: &[T], rhs: &[T], func: F) -> Vec<T> 
+    where F: Fn((&T, &T)) -> T {
     assert!(lhs.len() == rhs.len());
     lhs.iter().zip(rhs)
-              .map(|(a, b)| !a & !b)
-              .collect::<Vec<u8>>()
+              .map(func)
+              .collect::<Vec<T>>()
+}
+
+#[inline]
+pub fn nand_slice_vbr_len (lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
+    apply_bitwise_slice_vbr_len(lhs, rhs, 255, |(a, b)| !a & !b)
+}
+
+#[inline]
+pub fn and_slice_vbr_len(lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
+    apply_bitwise_slice_vbr_len(lhs, rhs, 0, |(a, b)| a & b)
 }
 
 #[test]
 fn test_nand_slice() {
     let a = vec![0, 0];
     let b = vec![0, 1];
-    let c = nand_slice(&a, &b);
+    let c = nand_slice_vbr_len(&a, &b);
 
     assert_eq!(c, vec![255, 254]);
 }
