@@ -36,17 +36,17 @@ impl DefaultHandler {
     /// really necessary to get a complete picture to get a request chunk
     /// additionally the definitions of owned and request_map are not strict yet - currently they
     /// are growable, and impelementers should take note of that
-    pub fn unclaimed_field (&self) -> Vec<u8> {
+    pub fn unclaimed_fields (&self) -> Vec<u8> {
         if self.owned.len() == self.request_map.len() {
             DefaultHandler::nand_slice(&self.owned, &self.request_map)
         } else {
             if self.owned.len() < self.request_map.len() {
                 let mut vec = DefaultHandler::nand_slice(&self.request_map[..self.owned.len()], &self.owned);
-                vec.extend((0..self.request_map.len()-self.owned.len()).map(|_| 0));
+                vec.extend((0..self.request_map.len()-self.owned.len()).map(|_| 255));
                 vec
             } else {
                 let mut vec = DefaultHandler::nand_slice(&self.request_map, &self.owned[..self.request_map.len()]);
-                vec.extend((0..self.owned.len()-self.request_map.len()).map(|_| 0));
+                vec.extend((0..self.owned.len()-self.request_map.len()).map(|_| 255));
                 vec
             }
         }
@@ -161,10 +161,30 @@ fn set_have_bitfield (bitfield: &mut Vec<u8>, index: usize) {
     //bounds check needs to be here because the bitfield is a variable size - which we want in
     //the future
     if chunk_index+1 > bitfield.len() {
-        bitfield.extend((0..chunk_index).map(|_| 0 as u8));
+        bitfield.extend((0..chunk_index).map(|_| 0));
     }
 
     bitfield[chunk_index] = bitfield[chunk_index] | chunk_mask;
+}
+
+#[test]
+fn test_nand_slice() {
+    let a = vec![0, 0];
+    let b = vec![0, 1];
+    let c = DefaultHandler::nand_slice(&a, &b);
+
+    assert_eq!(c, vec![255, 254]);
+}
+
+#[test]
+fn test_unclaimed_fields() {
+    let mut handler = DefaultHandler::new();
+
+    handler.owned = vec![0, 0, 0];
+    handler.request_map = vec![1, 0];
+
+    let c = handler.unclaimed_fields();
+    assert_eq!(c, vec![254, 255, 255]);
 }
 
 #[test]
