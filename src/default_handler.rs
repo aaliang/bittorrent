@@ -12,7 +12,8 @@ pub trait Handler {
     fn handle(&mut self, message: Self::MessageType, peer: &mut Peer);
 }
 
-
+//TODO: state probably shouldn't be stored here in the handler... eventually move it back in main. for each
+//torrent
 pub struct DefaultHandler {
     //the global piece count
     gpc: Vec<u16>,
@@ -31,6 +32,17 @@ impl DefaultHandler {
         }
     }
 
+    /// Increases the value of gpc[piece_index] by n
+    #[inline]
+    pub fn gpc_incr (&mut self, piece_index: usize, n: u16) {
+        //starting to regret making the bitfield variable in size... maybe i can preallocate. will come back and re-eval
+        let len = self.gpc.len();
+        if piece_index >= len {
+            self.gpc.extend((0..piece_index+1 - len).map(|_| 0));
+        }
+        self.gpc[piece_index] += n;
+    }
+
     /// returns a complete bitfield of pieces that aren't owned or being requested
     /// this is done almost as strictly as possible - and might be a little of a waste as it isn't
     /// really necessary to get a complete picture to get a request chunk
@@ -38,26 +50,18 @@ impl DefaultHandler {
     /// are growable, and impelementers should take note of that
     pub fn unclaimed_fields (&self) -> Vec<u8> {
         if self.owned.len() == self.request_map.len() {
-            DefaultHandler::nand_slice(&self.owned, &self.request_map)
+            nand_slice(&self.owned, &self.request_map)
         } else {
             if self.owned.len() < self.request_map.len() {
-                let mut vec = DefaultHandler::nand_slice(&self.request_map[..self.owned.len()], &self.owned);
+                let mut vec = nand_slice(&self.request_map[..self.owned.len()], &self.owned);
                 vec.extend((0..self.request_map.len()-self.owned.len()).map(|_| 255));
                 vec
             } else {
-                let mut vec = DefaultHandler::nand_slice(&self.request_map, &self.owned[..self.request_map.len()]);
+                let mut vec = nand_slice(&self.request_map, &self.owned[..self.request_map.len()]);
                 vec.extend((0..self.owned.len()-self.request_map.len()).map(|_| 255));
                 vec
             }
         }
-    }
-
-    #[inline]
-    pub fn nand_slice (lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
-        assert!(lhs.len() == rhs.len());
-        lhs.iter().zip(rhs)
-                  .map(|(a, b)| !a & !b)
-                  .collect::<Vec<u8>>()
     }
 }
 
@@ -69,10 +73,9 @@ impl Handler for DefaultHandler {
         println!("{:?}", message);
         match message {
             Message::Have{piece_index: index} => {
-                peer.state.set_have(index as usize);
-            }
-            Message::Bitfield(bitfield) => {
-                peer.state.set_bitfield(bitfield);
+                let i = index as usize;
+                self.gpc_incr(i, 1);
+                peer.state.set_have(i);
             },
             Message::Choke => {
                 peer.state.set_us_choked(true);
@@ -82,6 +85,20 @@ impl Handler for DefaultHandler {
             },
             Message::Interested => {
                 peer.state.set_us_interested(true);
+            },
+            Message::Bitfield(bitfield) => {
+                for (index, byte) in bitfield.iter().enumerate() {
+                    for i in 0..8 { //cast up so i don't have to deal with overflows
+                        let n = 1 & (((*byte as u16) << i) >> (8-i));
+                        self.gpc_incr(index*8+i, n & 255);
+                    }
+                }
+                peer.state.set_bitfield(bitfield);
+
+                let candidates = self.unclaimed_fields();
+                let request = peer.get_request(&candidates);
+                println!("{:?}", request);
+
             },
             _ => {
             }
@@ -106,7 +123,19 @@ impl Peer {
 
     pub fn send_message (&mut self, message: Message) {
         let as_bytes = message.to_byte_array();
-        self.stream.write_all(&as_bytes);
+        let _ = self.stream.write_all(&as_bytes);
+    }
+}
+
+trait RequestGenerator {
+    /// Given a bitfield of eligible candidates, returns if possible the (index, begin, and length)
+    /// corresponding to the fields in Message::Request
+    fn get_request(&self, candidate_field: &[u8]) -> Option<(u32, u32, u32)>;
+}
+
+impl RequestGenerator for Peer {
+    fn get_request(&self, candidate_field: &[u8]) -> Option<(u32, u32, u32)> {
+        Some((1, 1, 1))
     }
 }
 
@@ -152,8 +181,8 @@ impl State {
     }
 }
 
+#[inline]
 fn set_have_bitfield (bitfield: &mut Vec<u8>, index: usize) {
-    //lets say i have index 500 -> how do i bitwise over a u8 array?
     let chunk_index = index/8;
     let chunk_posit = index % 8;
     let chunk_mask = 128 >> chunk_posit;
@@ -167,11 +196,20 @@ fn set_have_bitfield (bitfield: &mut Vec<u8>, index: usize) {
     bitfield[chunk_index] = bitfield[chunk_index] | chunk_mask;
 }
 
+
+#[inline]
+pub fn nand_slice (lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
+    assert!(lhs.len() == rhs.len());
+    lhs.iter().zip(rhs)
+              .map(|(a, b)| !a & !b)
+              .collect::<Vec<u8>>()
+}
+
 #[test]
 fn test_nand_slice() {
     let a = vec![0, 0];
     let b = vec![0, 1];
-    let c = DefaultHandler::nand_slice(&a, &b);
+    let c = nand_slice(&a, &b);
 
     assert_eq!(c, vec![255, 254]);
 }

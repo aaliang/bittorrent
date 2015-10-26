@@ -17,6 +17,8 @@ use bittorrent::default_handler::{Handler, DefaultHandler, Peer};
 
 // Sets up a sink pool. it functions similarly to an Actor
 /// atm, rust doesn't support HKTs
+/// TODO: the Handler now stores state... so some assumptions no longer hold
+///
 fn init <'a> (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
@@ -50,7 +52,6 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
                 Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
                     let mut peer = Peer::new(peer_id_str, reader.clone_stream());
-                    
                     peer.send_message(Message::Interested);
                     peer.state.set_us_interested(true);
 
@@ -62,8 +63,11 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
                             Ok(message) => {
                                 let _ = tx.send((message, arc.clone()));
                             },
-                            Err(_) => {
-                                println!("error waiting for message");
+                            Err(e) => {
+                                println!("error waiting for message: {:?}", e);
+                                //TODO: need to signal the handler thread that the client has
+                                //disconnected
+                                break;
                             }
                         };
                     }
