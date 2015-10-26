@@ -77,6 +77,7 @@ impl DefaultHandler {
         for (index, byte) in eligible.iter().enumerate() {
             for i in 0..8 { //cast up so i don't have to deal with overflows
                 let n = 1 & (((*byte as u16) << i) >> (8-i));
+                //println!("n: {}", n);
                 if n == 1 {
                     let true_index = index*8+1;
                     let population = self.gpc[true_index];
@@ -100,6 +101,12 @@ impl DefaultHandler {
     pub fn unclaimed_fields (&self) -> Vec<u8> {
         nand_slice_vbr_len(&self.owned, &self.request_map)
     }
+
+    #[inline]
+    pub fn req (&mut self, peer_bitfield: &Vec<u8>) {
+        let index = self.rarest_wrt_peer(peer_bitfield);
+        println!("REQ: {:?}", index);
+    }
 }
 
 /// The default algorithm
@@ -113,6 +120,7 @@ impl Handler for DefaultHandler {
                 let i = index as usize;
                 self.gpc_incr(i, 1);
                 peer.state.set_have(i);
+                self.req(&peer.state.bitfield);
             },
             Message::Choke => {
                 peer.state.set_us_choked(true);
@@ -132,10 +140,12 @@ impl Handler for DefaultHandler {
                 }
                 peer.state.set_bitfield(bitfield);
 
+                /*
                 let candidates = self.unclaimed_fields();
                 let request = peer.get_request(&candidates);
-                println!("{:?}", request);
+                */
 
+                self.req(&peer.state.bitfield);
             },
             _ => {
             }
@@ -241,13 +251,14 @@ pub fn apply_bitwise_slice_vbr_len <F, T:Clone> (lhs: &[T], rhs: &[T], default: 
         bitwise_byte_slice(lhs, rhs, func)
     } else {
         if lhs.len() < rhs.len() {
-            let mut vec = bitwise_byte_slice(&rhs[..lhs.len()], lhs, func);
-            vec.extend((0..rhs.len()-lhs.len()).map(|_| default.clone()));
-            vec
+            //let mut a = (&rhs[..lhs.len()]).to_owned();
+            let mut a = lhs.to_owned();
+            a.extend((0..rhs.len()-lhs.len()).map(|_| default.clone()));
+            bitwise_byte_slice(&a, rhs, func)
         } else {
-            let mut vec = bitwise_byte_slice(rhs, &lhs[..rhs.len()], func);
-            vec.extend((0..lhs.len()-rhs.len()).map(|_| default.clone()));
-            vec
+            let mut b = rhs.to_owned();
+            b.extend((0..lhs.len()-rhs.len()).map(|_| default.clone()));
+            bitwise_byte_slice(lhs, &b, func)
         }
     }
 }
@@ -256,6 +267,7 @@ pub fn apply_bitwise_slice_vbr_len <F, T:Clone> (lhs: &[T], rhs: &[T], default: 
 #[inline]
 pub fn bitwise_byte_slice <F, T> (lhs: &[T], rhs: &[T], func: F) -> Vec<T> 
     where F: Fn((&T, &T)) -> T {
+    println!("llen: {}, rlen: {}", lhs.len(), rhs.len());
     assert!(lhs.len() == rhs.len());
     lhs.iter().zip(rhs)
               .map(func)
@@ -264,12 +276,14 @@ pub fn bitwise_byte_slice <F, T> (lhs: &[T], rhs: &[T], func: F) -> Vec<T>
 
 #[inline]
 pub fn nand_slice_vbr_len (lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
-    apply_bitwise_slice_vbr_len(lhs, rhs, 255, |(a, b)| !a & !b)
+    apply_bitwise_slice_vbr_len(lhs, rhs, 0, |(a, b)| !a & !b)
 }
 
 #[inline]
 pub fn and_slice_vbr_len(lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
-    apply_bitwise_slice_vbr_len(lhs, rhs, 0, |(a, b)| a & b)
+    println!("lhs: {:?}", lhs);
+    println!("rhs: {:?}", rhs);
+    apply_bitwise_slice_vbr_len(lhs, rhs, 255, |(a, b)| a & b)
 }
 
 #[test]
