@@ -93,11 +93,13 @@ fn main () {
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
-    let (tx, sink) = init(DefaultHandler::new());
+    let (tx, sink) = init(DefaultHandler::new(metadata.piece_length as usize));
 
     //for now initialize torrents inline with main
     init_torrent(&tx, &metadata, 6887, 0);
 
     //block until the sink shuts down
     let _ = sink.join();
+
+    DefaultHandler::cool_test();
 }

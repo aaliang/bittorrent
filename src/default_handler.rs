@@ -3,8 +3,38 @@ use buffered_reader::BufferedReader;
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
 use std::io::Write;
-
+use std::cmp::Ordering;
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
+
+#[derive(PartialEq)]
+struct Position {
+    index: usize,
+    offset: usize
+}
+
+impl PartialOrd for Position {
+    fn partial_cmp (&self, rhs: &Position) -> Option<Ordering> {
+         if self.index < rhs.index {
+            Some(Ordering::Less)
+         } else if self.index < rhs.index {
+            Some(Ordering::Greater)
+         } else {
+            if self.offset < rhs.offset {
+                Some(Ordering::Less)
+            } else if self.offset > rhs.offset {
+                Some(Ordering::Greater)
+            } else {
+                Some(Ordering::Equal)
+            }
+         }
+    }
+}
+
+pub struct Block {
+    start: Position,
+    end: Position
+}
+
 
 /// Handles messages. This is a cheap way to force reactive style
 pub trait Handler {
@@ -18,20 +48,63 @@ pub struct DefaultHandler {
     //the global piece count
     gpc: Vec<u16>,
     //pieces owned by self. (as a bitfield)
-    owned: Vec<u8>,
+    pub owned: Vec<u8>,
     //outgoing requests
-    request_map: Vec<u8>
+    pub request_map: Vec<u8>,
+
+    s_request_map: Vec<Block>,
+    piece_length: usize
 }
 
 impl DefaultHandler {
-    pub fn new () -> DefaultHandler {
+    pub fn new (piece_length: usize) -> DefaultHandler {
         DefaultHandler {
             gpc: vec![],
             owned: vec![],
-            request_map: vec![]
+            request_map: vec![],
+            s_request_map: vec![],
+            piece_length: piece_length
         }
     }
+    pub fn cool_test () {
+        let mut vec = vec![];
+        DefaultHandler::add_request(&mut vec, 0, 0, 0, 1300);
+    }
 
+    pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
+        let num_whole_pieces = bytes/piece_length;
+        let rem_offset = (offset + bytes) % piece_length;
+
+        let start = Position {
+            index: index,
+            offset: offset
+        };
+        let end = Position {
+            index: index + num_whole_pieces,
+            offset: rem_offset
+        };
+
+        Block{start: start, end: end}
+    }
+
+    pub fn add_request(arr: &mut Vec<Block>, index: usize, offset: usize, bytes: usize, piece_length: usize) {
+        if arr.len() == 0 {
+        }
+        let (mut win_left, mut win_right) = (0, arr.len());
+        let position = Position {index: index, offset: offset};
+        loop {
+            let arr_index = (win_left+win_right)/2;
+            let block = &arr[arr_index]; 
+            if position > block.end {
+                win_left = arr_index;
+            } else if position < block.start {
+                win_right = arr_index;
+            } else {
+                //we have a bingo
+                break;
+            }
+        }
+    }
     /// Increases the value of gpc[piece_index] by n
     #[inline]
     pub fn gpc_incr (&mut self, piece_index: usize, n: u16) {
@@ -189,19 +262,19 @@ impl RequestGenerator for Peer {
 #[derive(Debug)]
 pub struct State {
     //are we choked by them?
-    us_choked: bool,
+    pub us_choked: bool,
     //are we interested in them?
-    us_interested: bool,
+    pub us_interested: bool,
     //are they choked by us?
-    is_choked: bool,
+    pub is_choked: bool,
     //are they interested in us?
-    is_interested: bool,
+    pub is_interested: bool,
     //the intention is that eventually we will support growable files. so going with vector
-    bitfield: Vec<u8>
+    pub bitfield: Vec<u8>
 }
 
 impl State {
-    fn new () -> State {
+    pub fn new () -> State {
         State {
             us_choked: true,
             us_interested: false,
@@ -215,15 +288,15 @@ impl State {
         self.us_interested = us_interested;
     }
 
-    fn set_bitfield (&mut self, bitfield: Vec<u8>) {
+    pub fn set_bitfield (&mut self, bitfield: Vec<u8>) {
         self.bitfield = bitfield;
     }
 
-    fn set_have (&mut self, index: usize) {
+    pub fn set_have (&mut self, index: usize) {
         set_have_bitfield(&mut self.bitfield, index);
     }
 
-    fn set_us_choked (&mut self, us_choked: bool) {
+    pub fn set_us_choked (&mut self, us_choked: bool) {
         self.us_choked = us_choked;
     }
 }
@@ -265,7 +338,7 @@ pub fn apply_bitwise_slice_vbr_len <F, T:Clone> (lhs: &[T], rhs: &[T], default: 
 
 /// Zip-maps a generic func (intended bitwise) over two byte slices
 #[inline]
-pub fn bitwise_byte_slice <F, T> (lhs: &[T], rhs: &[T], func: F) -> Vec<T> 
+pub fn bitwise_byte_slice <F, T> (lhs: &[T], rhs: &[T], func: F) -> Vec<T>
     where F: Fn((&T, &T)) -> T {
     println!("llen: {}, rlen: {}", lhs.len(), rhs.len());
     assert!(lhs.len() == rhs.len());
@@ -284,60 +357,4 @@ pub fn and_slice_vbr_len(lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
     println!("lhs: {:?}", lhs);
     println!("rhs: {:?}", rhs);
     apply_bitwise_slice_vbr_len(lhs, rhs, 255, |(a, b)| a & b)
-}
-
-#[test]
-fn test_nand_slice() {
-    let a = vec![0, 0];
-    let b = vec![0, 1];
-    let c = nand_slice_vbr_len(&a, &b);
-
-    assert_eq!(c, vec![255, 254]);
-}
-
-#[test]
-fn test_unclaimed_fields() {
-    let mut handler = DefaultHandler::new();
-
-    handler.owned = vec![0, 0, 0];
-    handler.request_map = vec![1, 0];
-
-    let c = handler.unclaimed_fields();
-    assert_eq!(c, vec![254, 255, 255]);
-}
-
-#[test]
-fn test_set_have_singleton_bitfield() {
-    let mut state = State::new();
-
-    state.set_bitfield(vec![0]);
-    state.set_have(2);
-
-    assert_eq!(state.bitfield[0], 32);
-}
-
-#[test]
-fn test_set_have_longer_bitfiled() {
-    let mut state = State::new();
-
-    state.set_bitfield(vec![0, 0, 0, 0]);
-    state.set_have(23);
-
-    assert_eq!(state.bitfield[0], 0);
-    assert_eq!(state.bitfield[1], 0);
-    assert_eq!(state.bitfield[2], 1);
-    assert_eq!(state.bitfield[3], 0);
-}
-
-#[test]
-fn test_set_have_out_of_bounds() {
-    let mut state = State::new();
-
-    state.set_bitfield(vec![0, 1]);
-    state.set_have(31);
-
-    assert_eq!(state.bitfield[0], 0);
-    assert_eq!(state.bitfield[1], 1);
-    assert_eq!(state.bitfield[2], 0);
-    assert_eq!(state.bitfield[3], 1);
 }

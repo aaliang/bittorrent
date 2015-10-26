@@ -33,7 +33,7 @@ pub struct Metadata {
     pub announce: String,
     pub info_hash: [u8; 20],
     name: String,
-    piece_length: i64,
+    pub piece_length: i64,
     pieces: Vec<u8>,
     mode_info: FileMode,
 }
