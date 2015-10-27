@@ -6,7 +6,7 @@ use std::io::Write;
 use std::cmp::Ordering;
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Position {
     index: usize,
     offset: usize
@@ -25,7 +25,7 @@ impl PartialOrd for Position {
     fn partial_cmp (&self, rhs: &Position) -> Option<Ordering> {
          if self.index < rhs.index {
             Some(Ordering::Less)
-         } else if self.index < rhs.index {
+         } else if self.index > rhs.index {
             Some(Ordering::Greater)
          } else {
             if self.offset < rhs.offset {
@@ -39,15 +39,15 @@ impl PartialOrd for Position {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct Block {
+#[derive(PartialEq, Debug, Clone)]
+pub struct Piece {
     start: Position,
     end: Position
 }
 
-impl Block {
-    pub fn new (start: Position, end: Position) -> Block {
-        Block {
+impl Piece {
+    pub fn new (start: Position, end: Position) -> Piece {
+        Piece {
             start: start,
             end: end
         }
@@ -71,7 +71,7 @@ pub struct DefaultHandler {
     //outgoing requests
     pub request_map: Vec<u8>,
 
-    s_request_map: Vec<Block>,
+    s_request_map: Vec<Piece>,
     piece_length: usize
 }
 
@@ -87,7 +87,7 @@ impl DefaultHandler {
     }
 
     //start is inclusive, end is exclusive
-    pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
+    pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
         let num_whole_pieces = bytes/piece_length;
         let rem_offset = (offset + bytes) % piece_length;
 
@@ -100,11 +100,11 @@ impl DefaultHandler {
             offset: rem_offset
         };
 
-        Block{start: start, end: end}
+        Piece{start: start, end: end}
     }
 
     //both start and end are inclusive
-    pub fn get_block_boundaries_inclusive (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
+    pub fn get_block_boundaries_inclusive (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
         let num_whole_pieces = bytes/piece_length;
         let rem_offset = (offset + bytes) % piece_length;
 
@@ -125,26 +125,104 @@ impl DefaultHandler {
             offset: n_offset
         };
 
-        Block{start: start, end: n_end}
+        Piece{start: start, end: n_end}
     }
 
-    pub fn add_request(arr: &mut Vec<Block>, index: usize, offset: usize, bytes: usize, piece_length: usize) {
-        if arr.len() == 0 {
-            arr.push(DefaultHandler::get_block_boundaries(piece_length, index, offset, bytes));
-        } else {
+    pub fn test () {
+        let mut vec = vec![];
+        let piece_length = 5;
+
+        let a = {  //empty case
+            let index = 0;
+            let offset = 0;
+            let bytes = 5;
+
+            let expect = Piece::new(Position::new(index, offset), Position::new(index, piece_length - 1));
+            DefaultHandler::add_request(&mut vec, index, offset, bytes, piece_length);
+            assert_eq!(vec[0], expect.clone());
+
+            expect
+        };
+
+        let b = {
+            let index = 2;
+            let offset = 0;
+            let bytes = 5;
+
+            let expect = Piece::new(Position::new(index, offset), Position::new(index, piece_length - 1));
+
+            DefaultHandler::add_request(&mut vec, index, offset, bytes, piece_length);
+
+            assert_eq!(vec, vec![a, expect.clone()]);
+
+            expect
+        };
+
+    }
+
+    pub fn add_request(arr: &mut Vec<Piece>, index: usize, offset: usize, bytes: usize, piece_length: usize) {
+        let new_block = DefaultHandler::get_block_boundaries_inclusive(piece_length, index, offset, bytes);
+
+        if arr.len() == 0 || new_block.start >= arr.last().unwrap().end {
+            arr.push(new_block);
+        } else 
+        if new_block.end <= arr.first().unwrap().start {
+            arr.insert(0, new_block);
+        }
+        else {
             let (mut win_left, mut win_right) = (0, arr.len());
-            let position = Position {index: index, offset: offset};
-            loop {
+            //let position = Position {index: index, offset: offset};
+
+            while (win_left < win_right) {
                 let arr_index = (win_left+win_right)/2;
-                let block = &arr[arr_index]; 
-                if position > block.end {
-                    win_left = arr_index;
-                } else if position < block.start {
-                    win_right = arr_index;
+
+                println!("index: {} - (l: {}, r: {})", arr_index, win_left, win_right);
+                let block = &arr[arr_index];
+
+                println!("curr block: {:?}", block);
+                println!("new block: {:?}", new_block);
+
+                let el_right = &arr[arr_index + 1];
+                let el_left = &arr[arr_index - 1];
+
+                if new_block.start >= block.end {
+                    //no overlaps
+                    if new_block.end <= el_right.start {
+                        println!("insert at arr_index+1");
+                        break;
+                    } else {
+                        println!("look to the right");
+                        win_left = arr_index + 1;
+                    }
+                } else
+                if new_block.end <= block.start {
+                    if new_block.start >= el_left.end {
+                        println!("insert at arr_index");
+                        break;
+                    } else {
+                        println!("look to the left");
+                        win_right = arr_index - 1;
+                    }
                 } else {
+                    println!("not sure")
+                }
+               
+                /*
+                if position > block.end {
+                    println!("look to the right");
+                    win_left = arr_index + 1;
+                } else if position < block.start {
+                    println!("look to the left");
+                    win_right = arr_index - 1;
+                } else {
+                    println!("equal");
                     //we have a bingo
                     break;
-                }
+                }*/
+            }
+
+            if (win_left > win_right) {
+                println!("could not find");
             }
         }
     }
