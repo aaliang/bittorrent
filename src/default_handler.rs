@@ -6,10 +6,19 @@ use std::io::Write;
 use std::cmp::Ordering;
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 
-#[derive(PartialEq)]
-struct Position {
+#[derive(PartialEq, Debug)]
+pub struct Position {
     index: usize,
     offset: usize
+}
+
+impl Position {
+    pub fn new (index: usize, offset: usize) -> Position {
+        Position {
+            index: index,
+            offset: offset
+        }
+    }
 }
 
 impl PartialOrd for Position {
@@ -30,9 +39,19 @@ impl PartialOrd for Position {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub struct Block {
     start: Position,
     end: Position
+}
+
+impl Block {
+    pub fn new (start: Position, end: Position) -> Block {
+        Block {
+            start: start,
+            end: end
+        }
+    }
 }
 
 
@@ -66,10 +85,35 @@ impl DefaultHandler {
             piece_length: piece_length
         }
     }
-    pub fn cool_test () {
-        let mut vec = vec![];
-        DefaultHandler::add_request(&mut vec, 0, 0, 0, 1300);
-    }
+
+    /*
+    pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
+        assert!(bytes > 0);
+        let residue_blocks = (bytes-1) % piece_length;
+
+        let whole_blocks_occupied = bytes/piece_length;
+        let additional = bytes % piece_length;
+        let nml_offset = (residue_blocks+offset) % piece_length;
+
+        let index_offset =
+            if additional == 0 {
+                whole_blocks_occupied - 1
+            } else {
+                whole_blocks_occupied
+        };
+
+        let start = Position {
+            index: index,
+            offset: offset
+        };
+
+        let end = Position {
+            index: index + index_offset,
+            offset: nml_offset
+        };
+
+        Block{start: start, end: end}
+    }*/
 
     pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
         let num_whole_pieces = bytes/piece_length;
@@ -89,19 +133,21 @@ impl DefaultHandler {
 
     pub fn add_request(arr: &mut Vec<Block>, index: usize, offset: usize, bytes: usize, piece_length: usize) {
         if arr.len() == 0 {
-        }
-        let (mut win_left, mut win_right) = (0, arr.len());
-        let position = Position {index: index, offset: offset};
-        loop {
-            let arr_index = (win_left+win_right)/2;
-            let block = &arr[arr_index]; 
-            if position > block.end {
-                win_left = arr_index;
-            } else if position < block.start {
-                win_right = arr_index;
-            } else {
-                //we have a bingo
-                break;
+            arr.push(DefaultHandler::get_block_boundaries(piece_length, index, offset, bytes));
+        } else {
+            let (mut win_left, mut win_right) = (0, arr.len());
+            let position = Position {index: index, offset: offset};
+            loop {
+                let arr_index = (win_left+win_right)/2;
+                let block = &arr[arr_index]; 
+                if position > block.end {
+                    win_left = arr_index;
+                } else if position < block.start {
+                    win_right = arr_index;
+                } else {
+                    //we have a bingo
+                    break;
+                }
             }
         }
     }
@@ -244,18 +290,6 @@ impl Peer {
     pub fn send_message (&mut self, message: Message) {
         let as_bytes = message.to_byte_array();
         let _ = self.stream.write_all(&as_bytes);
-    }
-}
-
-trait RequestGenerator {
-    /// Given a bitfield of eligible candidates, returns if possible the (index, begin, and length)
-    /// corresponding to the fields in Message::Request
-    fn get_request(&self, candidate_field: &[u8]) -> Option<(u32, u32, u32)>;
-}
-
-impl RequestGenerator for Peer {
-    fn get_request(&self, candidate_field: &[u8]) -> Option<(u32, u32, u32)> {
-        Some((1, 1, 1))
     }
 }
 

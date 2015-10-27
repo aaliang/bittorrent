@@ -101,5 +101,5 @@ fn main () {
     //block until the sink shuts down
     let _ = sink.join();
 
-    DefaultHandler::cool_test();
+    //DefaultHandler::cool_test();
 }
