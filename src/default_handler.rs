@@ -86,35 +86,7 @@ impl DefaultHandler {
         }
     }
 
-    /*
-    pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
-        assert!(bytes > 0);
-        let residue_blocks = (bytes-1) % piece_length;
-
-        let whole_blocks_occupied = bytes/piece_length;
-        let additional = bytes % piece_length;
-        let nml_offset = (residue_blocks+offset) % piece_length;
-
-        let index_offset =
-            if additional == 0 {
-                whole_blocks_occupied - 1
-            } else {
-                whole_blocks_occupied
-        };
-
-        let start = Position {
-            index: index,
-            offset: offset
-        };
-
-        let end = Position {
-            index: index + index_offset,
-            offset: nml_offset
-        };
-
-        Block{start: start, end: end}
-    }*/
-
+    //start is inclusive, end is exclusive
     pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
         let num_whole_pieces = bytes/piece_length;
         let rem_offset = (offset + bytes) % piece_length;
@@ -129,6 +101,31 @@ impl DefaultHandler {
         };
 
         Block{start: start, end: end}
+    }
+
+    //both start and end are inclusive
+    pub fn get_block_boundaries_inclusive (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Block {
+        let num_whole_pieces = bytes/piece_length;
+        let rem_offset = (offset + bytes) % piece_length;
+
+        let start = Position {
+            index: index,
+            offset: offset
+        };
+        let end = Position {
+            index: index + num_whole_pieces,
+            offset: rem_offset
+        };
+
+        let n_offset = ((end.offset as i32  - 1 + piece_length as i32) % piece_length as i32) as usize;
+        let n_index = end.index - if n_offset == piece_length-1 { 1 } else { 0 };
+
+        let n_end = Position {
+            index: n_index,
+            offset: n_offset
+        };
+
+        Block{start: start, end: n_end}
     }
 
     pub fn add_request(arr: &mut Vec<Block>, index: usize, offset: usize, bytes: usize, piece_length: usize) {
