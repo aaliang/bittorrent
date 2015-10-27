@@ -52,6 +52,24 @@ impl Piece {
             end: end
         }
     }
+
+    //start is inclusive, end is exclusive
+    pub fn from (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
+        let num_whole_pieces = bytes/piece_length;
+        let rem_offset = (offset + bytes) % piece_length;
+
+        let start = Position {
+            index: index,
+            offset: offset
+        };
+        let end = Position {
+            index: index + num_whole_pieces,
+            offset: rem_offset
+        };
+
+        Piece{start: start, end: end}
+    }
+
 }
 
 
@@ -86,48 +104,6 @@ impl DefaultHandler {
         }
     }
 
-    //start is inclusive, end is exclusive
-    pub fn get_block_boundaries (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
-        let num_whole_pieces = bytes/piece_length;
-        let rem_offset = (offset + bytes) % piece_length;
-
-        let start = Position {
-            index: index,
-            offset: offset
-        };
-        let end = Position {
-            index: index + num_whole_pieces,
-            offset: rem_offset
-        };
-
-        Piece{start: start, end: end}
-    }
-
-    //both start and end are inclusive. DEPRECATED. DO NOT USE
-    pub fn get_block_boundaries_inclusive (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
-        let num_whole_pieces = bytes/piece_length;
-        let rem_offset = (offset + bytes) % piece_length;
-
-        let start = Position {
-            index: index,
-            offset: offset
-        };
-        let end = Position {
-            index: index + num_whole_pieces,
-            offset: rem_offset
-        };
-
-        let n_offset = ((end.offset as i32  - 1 + piece_length as i32) % piece_length as i32) as usize;
-        let n_index = end.index - if n_offset == piece_length-1 { 1 } else { 0 };
-
-        let n_end = Position {
-            index: n_index,
-            offset: n_offset
-        };
-
-        Piece{start: start, end: n_end}
-    }
-
     ///attempts to compact the piece indexed by {index} with elements to its left and right
     #[inline]
     pub fn compact_if_possible(arr: &mut Vec<Piece>, index: usize) {
@@ -156,8 +132,9 @@ impl DefaultHandler {
 
     #[inline]
     ///returns the index at which the chunk was inserted into the vector
-    pub fn add_request(arr: &mut Vec<Piece>, index: usize, offset: usize, bytes: usize, piece_length: usize) -> usize {
-        let new_block = DefaultHandler::get_block_boundaries(piece_length, index, offset, bytes);
+    //pub fn add_to_boundary_vec(arr: &mut Vec<Piece>) -> usize {
+    pub fn add_to_boundary_vec(arr: &mut Vec<Piece>, new_block: Piece) -> usize {
+        //let new_block = DefaultHandler::get_block_boundaries(piece_length, index, offset, bytes);
         if arr.len() == 0 || new_block.start >= arr.last().unwrap().end {
             arr.push(new_block);
             arr.len() - 1
@@ -170,7 +147,6 @@ impl DefaultHandler {
                 let arr_index = (win_left+win_right)/2;
                 let something = {
                     let block = &arr[arr_index];
-                    //let el_right = if arr.len() > arr_index+1 { Some(&arr[arr_index + 1]) } else {None};
                     let el_left = &arr[arr_index - 1];
                     let el_right = arr.get(arr_index + 1);
                     if new_block.start >= block.end {
@@ -208,8 +184,6 @@ impl DefaultHandler {
             //}
         }
     }
-
-
 
     /// Increases the value of gpc[piece_index] by n
     #[inline]
