@@ -81,7 +81,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
 }
 
 fn main () {
-    /*let path = env::args().nth(1)
+    let path = env::args().nth(1)
                           .unwrap_or_else(||panic!("no path to torrent provided"));
 
     let content = deserialize_file(path).unwrap_or_else(||panic!("unable to parse bencoded metadata"));
@@ -100,6 +100,4 @@ fn main () {
 
     //block until the sink shuts down
     let _ = sink.join();
-*/
-    DefaultHandler::test();
 }

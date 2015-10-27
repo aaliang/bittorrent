@@ -103,7 +103,7 @@ impl DefaultHandler {
         Piece{start: start, end: end}
     }
 
-    //both start and end are inclusive
+    //both start and end are inclusive. DEPRECATED. DO NOT USE
     pub fn get_block_boundaries_inclusive (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
         let num_whole_pieces = bytes/piece_length;
         let rem_offset = (offset + bytes) % piece_length;
@@ -128,104 +128,89 @@ impl DefaultHandler {
         Piece{start: start, end: n_end}
     }
 
-    pub fn test () {
-        let mut vec = vec![];
-        let piece_length = 5;
-
-        let a = {  //empty case
-            let index = 0;
-            let offset = 0;
-            let bytes = 5;
-
-            let expect = Piece::new(Position::new(index, offset), Position::new(index, piece_length - 1));
-            DefaultHandler::add_request(&mut vec, index, offset, bytes, piece_length);
-            assert_eq!(vec[0], expect.clone());
-
-            expect
+    ///attempts to compact the piece indexed by {index} with elements to its left and right
+    #[inline]
+    pub fn compact_if_possible(arr: &mut Vec<Piece>, index: usize) {
+        let res = {
+            let ref el = arr[index];
+            match ((arr.get(index-1), arr.get(index+1))) {
+                (Some(ref left), Some(ref right)) if left.end == el.start && el.end == right.start => {
+                    Some((index-1, index+1, Piece::new(left.start.clone(), right.end.clone())))},
+                (Some(ref left), _) if left.end == el.start => {
+                    Some((index-1, index, Piece::new(left.start.clone(), el.end.clone())))},
+                (_, Some(ref right)) if el.end == right.start => {
+                    Some((index, index+1, Piece::new(el.start.clone(), right.end.clone())))}
+                _ => None
+            }
         };
-
-        let b = {
-            let index = 2;
-            let offset = 0;
-            let bytes = 5;
-
-            let expect = Piece::new(Position::new(index, offset), Position::new(index, piece_length - 1));
-
-            DefaultHandler::add_request(&mut vec, index, offset, bytes, piece_length);
-
-            assert_eq!(vec, vec![a, expect.clone()]);
-
-            expect
-        };
-
+        match res {
+            Some((start_index, end_index, compacted_piece)) => {
+                for (n, i) in (start_index..end_index+1).enumerate() {
+                    arr.remove(n-i);
+                }
+                arr.insert(start_index, compacted_piece);
+            },
+            _ => ()
+        }
     }
 
-    pub fn add_request(arr: &mut Vec<Piece>, index: usize, offset: usize, bytes: usize, piece_length: usize) {
-        let new_block = DefaultHandler::get_block_boundaries_inclusive(piece_length, index, offset, bytes);
-
+    #[inline]
+    ///returns the index at which the chunk was inserted into the vector
+    pub fn add_request(arr: &mut Vec<Piece>, index: usize, offset: usize, bytes: usize, piece_length: usize) -> usize {
+        let new_block = DefaultHandler::get_block_boundaries(piece_length, index, offset, bytes);
         if arr.len() == 0 || new_block.start >= arr.last().unwrap().end {
             arr.push(new_block);
-        } else 
-        if new_block.end <= arr.first().unwrap().start {
+            arr.len() - 1
+        } else if new_block.end <= arr.first().unwrap().start {
             arr.insert(0, new_block);
-        }
-        else {
+            0
+        } else {
             let (mut win_left, mut win_right) = (0, arr.len());
-            //let position = Position {index: index, offset: offset};
-
-            while (win_left < win_right) {
+            while (win_left < win_right) { //should probably just use loop {}
                 let arr_index = (win_left+win_right)/2;
-
-                println!("index: {} - (l: {}, r: {})", arr_index, win_left, win_right);
-                let block = &arr[arr_index];
-
-                println!("curr block: {:?}", block);
-                println!("new block: {:?}", new_block);
-
-                let el_right = &arr[arr_index + 1];
-                let el_left = &arr[arr_index - 1];
-
-                if new_block.start >= block.end {
-                    //no overlaps
-                    if new_block.end <= el_right.start {
-                        println!("insert at arr_index+1");
-                        break;
-                    } else {
-                        println!("look to the right");
-                        win_left = arr_index + 1;
+                let something = {
+                    let block = &arr[arr_index];
+                    //let el_right = if arr.len() > arr_index+1 { Some(&arr[arr_index + 1]) } else {None};
+                    let el_left = &arr[arr_index - 1];
+                    let el_right = arr.get(arr_index + 1);
+                    if new_block.start >= block.end {
+                        match el_right {
+                            a @ None | a @ Some(_) if new_block.end <= a.unwrap().start => {
+                                Some(arr_index+1)
+                            },
+                            _ => {
+                                win_left = arr_index + 1;
+                                None
+                            }
+                        }
                     }
-                } else
-                if new_block.end <= block.start {
-                    if new_block.start >= el_left.end {
-                        println!("insert at arr_index");
-                        break;
-                    } else {
-                        println!("look to the left");
-                        win_right = arr_index - 1;
+                    else if new_block.end <= block.start {
+                            if new_block.start >= el_left.end {
+                                Some(arr_index)
+                            } else {
+                                win_right = arr_index - 1;
+                                None
+                            }
                     }
-                } else {
-                    println!("not sure")
+                    else { panic!("this is bad")}
+                };
+
+                match something {
+                    Some(i) => {
+                        arr.insert(i, new_block);
+                        return i
+                    },
+                    _ => ()
                 }
-               
-                /*
-                if position > block.end {
-                    println!("look to the right");
-                    win_left = arr_index + 1;
-                } else if position < block.start {
-                    println!("look to the left");
-                    win_right = arr_index - 1;
-                } else {
-                    println!("equal");
-                    //we have a bingo
-                    break;
-                }*/
             }
-
-            if (win_left > win_right) {
-                println!("could not find");
-            }
+            //if (win_left > win_right) {
+            panic!("this is also bad");
+            //}
         }
     }
+
+
+
     /// Increases the value of gpc[piece_index] by n
     #[inline]
     pub fn gpc_incr (&mut self, piece_index: usize, n: u16) {
