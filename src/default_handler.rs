@@ -1,7 +1,7 @@
 use bt_messages::Message;
 use buffered_reader::BufferedReader;
 use chunk::{Position, Piece};
-use peer::Peer;
+use peer::{Peer, SendPeerMessage};
 use std::cell::{RefCell, RefMut};
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
@@ -61,7 +61,7 @@ impl GlobalState {
                     let population = self.gpc[true_index];
                     let (_, mr_pop) = most_rare;
                     if population < mr_pop {
-                        most_rare = (Some(true_index), population)
+                        most_rare = (Some(true_index), population);
                     }
                 }
             }
@@ -210,7 +210,7 @@ impl DefaultHandler {
             0
         } else {
             let (mut win_left, mut win_right) = (0, arr.len());
-            while (win_left < win_right) { //should probably just use loop {}
+            while win_left < win_right { //should probably just use loop {}
                 let arr_index = (win_left+win_right)/2;
                 let something = {
                     let block = &arr[arr_index];
@@ -303,13 +303,6 @@ impl Handler for DefaultHandler {
                     }
                 }
                 peer.state.set_bitfield(bitfield);
-
-                /*
-                let candidates = self.unclaimed_fields();
-                let request = peer.get_request(&candidates);
-                */
-
-                global.req(&peer.state.bitfield);
             },
             _ => {
             }
@@ -325,7 +318,6 @@ pub fn apply_bitwise_slice_vbr_len <F, T:Clone> (lhs: &[T], rhs: &[T], default: 
         bitwise_byte_slice(lhs, rhs, func)
     } else {
         if lhs.len() < rhs.len() {
-            //let mut a = (&rhs[..lhs.len()]).to_owned();
             let mut a = lhs.to_owned();
             a.extend((0..rhs.len()-lhs.len()).map(|_| default.clone()));
             bitwise_byte_slice(&a, rhs, func)

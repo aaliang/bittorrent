@@ -13,7 +13,7 @@ use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::bt_messages::Message;
 use bittorrent::buffered_reader::BufferedReader;
 use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
-use bittorrent::peer::{connect_to_peer, gen_rand_peer_id, Peer};
+use bittorrent::peer::{connect_to_peer, gen_rand_peer_id, Peer, SendPeerMessage};
 use bittorrent::default_handler::{Handler, DefaultHandler, GlobalState, Spin};
 
 // Sets up a sink pool. it functions similarly to an Actor
@@ -62,17 +62,19 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>
                 Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
                     let mut peer = Peer::new(peer_id_str);
-                    //peer.send_message(Message::Interested);
                     peer.state.set_us_interested(true);
 
                     let peer_cell = RwLock::new(peer);
                     let arc = Arc::new(peer_cell);
+                    let mut pstream = reader.clone_stream();
+
+                    pstream.send_message(Message::Interested);
 
                     { //add to the global peer list
                         let _ga = ga.clone();
                         let mut _y = (&_ga).lock().unwrap();
                         let mut _x = _y.deref_mut();
-                        _x.add_new_peer(arc.clone(), reader.clone_stream());
+                        _x.add_new_peer(arc.clone(), pstream);
                     } //release da lock
 
 
@@ -126,7 +128,7 @@ fn main () {
             let mut guard = (&gs).lock().unwrap();
             (&mut guard).deref_mut().spin();
 
-            thread::sleep_ms(500);
+            thread::sleep_ms(800);
         }
     });
 

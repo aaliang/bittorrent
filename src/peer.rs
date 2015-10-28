@@ -23,6 +23,15 @@ impl Peer {
     }
 }
 
+pub trait SendPeerMessage:Write {
+    fn send_message(&mut self, message:Message) {
+        let as_bytes = message.to_byte_array();
+        let _ = self.write_all(&as_bytes);
+    }
+}
+
+impl SendPeerMessage for TcpStream {}
+
 #[derive(Debug, Clone)]
 pub struct State {
     //are we choked by them?
