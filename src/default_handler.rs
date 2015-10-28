@@ -90,6 +90,7 @@ pub struct DefaultHandler {
     pub request_map: Vec<u8>,
 
     s_request_map: Vec<Piece>,
+
     piece_length: usize
 }
 
@@ -102,6 +103,65 @@ impl DefaultHandler {
             s_request_map: vec![],
             piece_length: piece_length
         }
+    }
+
+    pub fn convert_bitfield_to_piece_vec (bitfield: &[u8]) -> Vec<Piece> {
+        let mut vec = Vec::new();
+        let mut a_start = None;
+        for (bitmap_byte_num, byte) in bitfield.iter().enumerate() {
+            let mut bitmap_offset = 0;
+            let mut remainder = byte.to_owned(); 
+            loop {
+                match remainder.leading_zeros() {
+                    0 => (),
+                    x => {
+                        let n = if x > 8 - bitmap_offset { 8 -bitmap_offset} else {x};
+                        bitmap_offset += n;
+
+                        match a_start {
+                            Some(_) => {
+                                let end = Position::new((bitmap_byte_num as u32 * 8 + bitmap_offset - n as u32) as usize, 0);
+                                vec.push(Piece::new(a_start.unwrap(), end));
+                                a_start = None;
+                            },
+                            None => {}
+                        }
+
+                        remainder = remainder << n;
+                    }
+                };
+                match (!remainder).leading_zeros() { //leading 1's after shifting
+                    0 => (),
+                    n => {
+                        match a_start {
+                            Some(_) => {/*do nothing*/},
+                            None => {
+                                a_start = Some(Position::new((bitmap_byte_num as u32 * 8 + bitmap_offset as u32) as usize, 0));
+                            }
+                        }
+
+                        bitmap_offset += n;
+                        println!("br: {}", remainder);
+                        remainder = remainder << n;
+                        println!("{}, shifted {}", remainder, n);
+                    }
+                };
+                if bitmap_offset == 8 {
+                    bitmap_offset = 0;
+                    break;
+                };
+            }
+        }
+
+        match a_start {
+            Some(_) => {
+                vec.push((
+                    Piece::new(a_start.unwrap(), 
+                    Position::new(bitfield.len() * 8, 0))));
+            },
+            _ => ()
+        };
+        vec
     }
 
     ///attempts to compact the piece indexed by {index} with elements to its left and right
