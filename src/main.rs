@@ -55,6 +55,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>
         let peer_id = peer_id.clone();
         let tx = tx.clone();
         let ga = global_arc.clone();
+
         thread::spawn(move || {
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((peer_id, mut reader)) => {
@@ -62,7 +63,16 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>
                     let mut peer = Peer::new(peer_id_str, reader.clone_stream());
                     peer.send_message(Message::Interested);
                     peer.state.set_us_interested(true);
+
                     let arc = Arc::new(Mutex::new(peer));
+                
+                    { //add to the global peer list
+                        let _ga = ga.clone();
+                        let mut _y = (&_ga).lock().unwrap();
+                        let mut _x = _y.deref_mut();
+                        _x.add_new_peer(arc.clone());
+                    } //release da lock
+
                     loop {
                         //we can't just block read in a loop - we'll never have a chance to send out
                         //outgoing messages over TCP

@@ -15,20 +15,26 @@ pub struct GlobalState {
     pub owned: Vec<u8>,
     pub request_map: Vec<u8>,
     s_request_map: Vec<u8>,
-    piece_length: usize
+    piece_length: usize,
+    peer_list: Vec<Arc<Mutex<Peer>>>
 }
 
 impl GlobalState {
-
     pub fn new (piece_length: usize) -> GlobalState {
         GlobalState {
             gpc: vec![],
             owned: vec![],
             request_map: vec![],
             s_request_map: vec![],
+            peer_list: vec![],
             piece_length: piece_length
         }
     }
+
+    pub fn add_new_peer (&mut self, peer: Arc<Mutex<Peer>>) {
+        self.peer_list.push(peer);
+    }
+
     /// Increases the value of gpc[piece_index] by n
     #[inline]
     pub fn gpc_incr (&mut self, piece_index: usize, n: u16) {
