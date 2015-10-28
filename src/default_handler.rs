@@ -6,7 +6,7 @@ use std::cell::{RefCell, RefMut};
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
 use std::io::Write;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::ops::{Deref, DerefMut};
 
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
@@ -17,7 +17,7 @@ pub struct GlobalState {
     pub request_map: Vec<u8>,
     s_request_map: Vec<u8>,
     piece_length: usize,
-    peer_list: Vec<(RefCell<Peer>, TcpStream)>
+    peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream)>
 }
 
 impl GlobalState {
@@ -32,7 +32,7 @@ impl GlobalState {
         }
     }
 
-    pub fn add_new_peer (&mut self, peer: RefCell<Peer>, stream: TcpStream) {
+    pub fn add_new_peer (&mut self, peer: Arc<RwLock<Peer>>, stream: TcpStream) {
         self.peer_list.push((peer, stream));
     }
 
@@ -113,11 +113,6 @@ impl GlobalState {
     }
 }
 
-/// Handles messages. This is a cheap way to force reactive style
-pub trait Handler {
-    type MessageType;
-    fn handle(&mut self, message: Self::MessageType, peer: &mut RefMut<Peer>, global_state: &mut GlobalState);
-}
 
 pub struct DefaultHandler;
 
@@ -258,11 +253,31 @@ impl DefaultHandler {
     }
 }
 
+pub trait Spin {
+    fn spin (&mut self);
+}
+
+impl Spin for GlobalState {
+    fn spin (&mut self) {
+        println!("len: {}", self.peer_list.len());
+        for tup in self.peer_list.iter() {
+            let (ref peer, _) = *tup;
+            println!("P#S {:?}", peer);
+        }
+    }
+}
+
+/// Handles messages. This is a cheap way to force reactive style
+pub trait Handler {
+    type MessageType;
+    fn handle(&mut self, message: Self::MessageType, peer: &mut Peer, global_state: &mut GlobalState);
+}
+
 /// The default algorithm
 impl Handler for DefaultHandler {
     type MessageType = Message;
     #[inline]
-    fn handle (&mut self, message: Message, peer: &mut RefMut<Peer>, global: &mut GlobalState) {
+    fn handle (&mut self, message: Message, peer: &mut Peer, global: &mut GlobalState) {
         println!("{:?}", message);
         match message {
             Message::Have{piece_index: index} => {
@@ -326,7 +341,6 @@ pub fn apply_bitwise_slice_vbr_len <F, T:Clone> (lhs: &[T], rhs: &[T], default: 
 #[inline]
 pub fn bitwise_byte_slice <F, T> (lhs: &[T], rhs: &[T], func: F) -> Vec<T>
     where F: Fn((&T, &T)) -> T {
-    println!("llen: {}, rlen: {}", lhs.len(), rhs.len());
     assert!(lhs.len() == rhs.len());
     lhs.iter().zip(rhs)
               .map(func)
@@ -340,7 +354,5 @@ pub fn nand_slice_vbr_len (lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
 
 #[inline]
 pub fn and_slice_vbr_len(lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
-    println!("lhs: {:?}", lhs);
-    println!("rhs: {:?}", rhs);
     apply_bitwise_slice_vbr_len(lhs, rhs, 255, |(a, b)| a & b)
 }

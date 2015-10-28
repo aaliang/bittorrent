@@ -8,7 +8,7 @@ use tracker::{Address, PEER_ID_LENGTH};
 
 /// Contains functionality required to setup and exchange messages with a peer
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Peer {
     pub id: String,
     pub state: State
