@@ -31,7 +31,6 @@ fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>)>, J
             let _ = handler.handle(message, peer);
         }
     });
-    //TODO: the sink join handle is probably no longer useful
     (tx, sink)
 }
 
