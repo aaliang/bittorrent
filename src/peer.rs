@@ -79,8 +79,9 @@ fn set_have_bitfield (bitfield: &mut Vec<u8>, index: usize) {
 
     //bounds check needs to be here because the bitfield is a variable size - which we want in
     //the future
-    if chunk_index+1 > bitfield.len() {
-        bitfield.extend((0..chunk_index).map(|_| 0));
+    let bitfield_len = bitfield.len();
+    if chunk_index+1 > bitfield_len {
+        bitfield.extend((0..chunk_index+1-bitfield_len).map(|_| 0));
     }
 
     bitfield[chunk_index] = bitfield[chunk_index] | chunk_mask;

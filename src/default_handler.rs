@@ -5,33 +5,23 @@ use peer::Peer;
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
 use std::io::Write;
+use std::sync::{Arc, Mutex};
+use std::ops::{Deref, DerefMut};
 
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 
-/// Handles messages. This is a cheap way to force reactive style
-pub trait Handler {
-    type MessageType;
-    fn handle(&mut self, message: Self::MessageType, peer: &mut Peer);
-}
-
-//TODO: state probably shouldn't be stored here in the handler... eventually move it back in main. for each
-//torrent
-pub struct DefaultHandler {
-    //the global piece count
+pub struct GlobalState {
     gpc: Vec<u16>,
-    //pieces owned by self. (as a bitfield)
     pub owned: Vec<u8>,
-    //outgoing requests
     pub request_map: Vec<u8>,
-
-    s_request_map: Vec<Piece>,
-
+    s_request_map: Vec<u8>,
     piece_length: usize
 }
 
-impl DefaultHandler {
-    pub fn new (piece_length: usize) -> DefaultHandler {
-        DefaultHandler {
+impl GlobalState {
+
+    pub fn new (piece_length: usize) -> GlobalState {
+        GlobalState {
             gpc: vec![],
             owned: vec![],
             request_map: vec![],
@@ -39,6 +29,92 @@ impl DefaultHandler {
             piece_length: piece_length
         }
     }
+    /// Increases the value of gpc[piece_index] by n
+    #[inline]
+    pub fn gpc_incr (&mut self, piece_index: usize, n: u16) {
+        //starting to regret making the bitfield variable in size... maybe i can preallocate. will come back and re-eval
+        let len = self.gpc.len();
+        if piece_index >= len {
+            self.gpc.extend((0..piece_index+1 - len).map(|_| 0));
+        }
+        self.gpc[piece_index] += n;
+    }
+
+    /// Returns the index of the rarest piece that isn't owned or currently being requested.
+    /// TODO: Approximations may yield optimized results
+    #[inline]
+    pub fn rarest (&self) -> Option<usize> {
+        //there's probably a faster way. doing this naively for the sake of forward progress
+        let mut most_rare = (None, u16::max_value());
+        for (index, byte) in self.unclaimed_fields().iter().enumerate() {
+            for i in 0..8 { //cast up so i don't have to deal with overflows
+                let n = 1 & (((*byte as u16) << i) >> (8-i));
+                if n == 1 {
+                    let true_index = index*8+1;
+                    let population = self.gpc[true_index];
+                    let (_, mr_pop) = most_rare;
+                    if population < mr_pop {
+                        most_rare = (Some(true_index), population)
+                    }
+                }
+            }
+        }
+        let (index, _) = most_rare;
+        index
+    }
+
+    /// Returns the index of the rarest piece that is owned by the peer and isn't both owned
+    /// and currently being requested
+    /// TODO: Approximations may yield optimized results
+    #[inline]
+    pub fn rarest_wrt_peer (&self, peer_bitfield: &Vec<u8>) -> Option<usize> {
+        //there's probably a faster way. doing this naively for the sake of forward progress
+        let mut most_rare = (None, u16::max_value());
+        let eligible = and_slice_vbr_len(&self.unclaimed_fields(), &peer_bitfield);
+        for (index, byte) in eligible.iter().enumerate() {
+            for i in 0..8 { //cast up so i don't have to deal with overflows
+                let n = 1 & (((*byte as u16) << i) >> (8-i));
+                //println!("n: {}", n);
+                if n == 1 {
+                    let true_index = index*8+1;
+                    let population = self.gpc[true_index];
+                    let (_, mr_pop) = most_rare;
+                    if population < mr_pop {
+                        most_rare = (Some(true_index), population)
+                    }
+                }
+            }
+        }
+        let (index, _) = most_rare;
+        index
+    }
+
+    /// returns a complete bitfield of pieces that aren't owned or being requested
+    /// this is done almost as strictly as possible - and might be a little of a waste as it isn't
+    /// really necessary to get a complete picture to get a request chunk
+    /// additionally the definitions of owned and request_map are not strict yet - currently they
+    /// are growable, and impelementers should take note of that
+    #[inline]
+    pub fn unclaimed_fields (&self) -> Vec<u8> {
+        nand_slice_vbr_len(&self.owned, &self.request_map)
+    }
+
+    #[inline]
+    pub fn req (&mut self, peer_bitfield: &Vec<u8>) {
+        let index = self.rarest_wrt_peer(peer_bitfield);
+        println!("REQ: {:?}", index);
+    }
+}
+
+/// Handles messages. This is a cheap way to force reactive style
+pub trait Handler {
+    type MessageType;
+    fn handle(&mut self, message: Self::MessageType, peer: &mut Peer, global_state: &mut GlobalState);
+}
+
+pub struct DefaultHandler;
+
+impl DefaultHandler {
 
     pub fn convert_bitfield_to_piece_vec (bitfield: &[u8]) -> Vec<Piece> {
         let mut vec = Vec::new();
@@ -150,12 +226,12 @@ impl DefaultHandler {
                         }
                     }
                     else if new_block.end <= block.start {
-                            if new_block.start >= el_left.end {
-                                Some(arr_index)
-                            } else {
-                                win_right = arr_index - 1;
-                                None
-                            }
+                        if new_block.start >= el_left.end {
+                            Some(arr_index)
+                        } else {
+                            win_right = arr_index - 1;
+                            None
+                        }
                     }
                     else { panic!("this is bad")}
                 };
@@ -173,96 +249,20 @@ impl DefaultHandler {
             //}
         }
     }
-
-    /// Increases the value of gpc[piece_index] by n
-    #[inline]
-    pub fn gpc_incr (&mut self, piece_index: usize, n: u16) {
-        //starting to regret making the bitfield variable in size... maybe i can preallocate. will come back and re-eval
-        let len = self.gpc.len();
-        if piece_index >= len {
-            self.gpc.extend((0..piece_index+1 - len).map(|_| 0));
-        }
-        self.gpc[piece_index] += n;
-    }
-
-    /// Returns the index of the rarest piece that isn't owned or currently being requested.
-    /// TODO: Approximations may yield optimized results
-    #[inline]
-    pub fn rarest (&self) -> Option<usize> {
-        //there's probably a faster way. doing this naively for the sake of forward progress
-        let mut most_rare = (None, u16::max_value());
-        for (index, byte) in self.unclaimed_fields().iter().enumerate() {
-            for i in 0..8 { //cast up so i don't have to deal with overflows
-                let n = 1 & (((*byte as u16) << i) >> (8-i));
-                if n == 1 {
-                    let true_index = index*8+1;
-                    let population = self.gpc[true_index];
-                    let (_, mr_pop) = most_rare;
-                    if population < mr_pop {
-                        most_rare = (Some(true_index), population)
-                    }
-                }
-            }
-        }
-        let (index, _) = most_rare;
-        index
-    }
-
-    /// Returns the index of the rarest piece that is owned by the peer and isn't both owned
-    /// and currently being requested
-    /// TODO: Approximations may yield optimized results
-    #[inline]
-    pub fn rarest_wrt_peer (&self, peer_bitfield: &Vec<u8>) -> Option<usize> {
-        //there's probably a faster way. doing this naively for the sake of forward progress
-        let mut most_rare = (None, u16::max_value());
-        let eligible = and_slice_vbr_len(&self.unclaimed_fields(), &peer_bitfield);
-        for (index, byte) in eligible.iter().enumerate() {
-            for i in 0..8 { //cast up so i don't have to deal with overflows
-                let n = 1 & (((*byte as u16) << i) >> (8-i));
-                //println!("n: {}", n);
-                if n == 1 {
-                    let true_index = index*8+1;
-                    let population = self.gpc[true_index];
-                    let (_, mr_pop) = most_rare;
-                    if population < mr_pop {
-                        most_rare = (Some(true_index), population)
-                    }
-                }
-            }
-        }
-        let (index, _) = most_rare;
-        index
-    }
-
-    /// returns a complete bitfield of pieces that aren't owned or being requested
-    /// this is done almost as strictly as possible - and might be a little of a waste as it isn't
-    /// really necessary to get a complete picture to get a request chunk
-    /// additionally the definitions of owned and request_map are not strict yet - currently they
-    /// are growable, and impelementers should take note of that
-    #[inline]
-    pub fn unclaimed_fields (&self) -> Vec<u8> {
-        nand_slice_vbr_len(&self.owned, &self.request_map)
-    }
-
-    #[inline]
-    pub fn req (&mut self, peer_bitfield: &Vec<u8>) {
-        let index = self.rarest_wrt_peer(peer_bitfield);
-        println!("REQ: {:?}", index);
-    }
 }
 
 /// The default algorithm
 impl Handler for DefaultHandler {
     type MessageType = Message;
     #[inline]
-    fn handle (&mut self, message: Message, peer: &mut Peer) {
+    fn handle (&mut self, message: Message, peer: &mut Peer, global: &mut GlobalState) {
         println!("{:?}", message);
         match message {
             Message::Have{piece_index: index} => {
                 let i = index as usize;
-                self.gpc_incr(i, 1);
+                global.gpc_incr(i, 1);
                 peer.state.set_have(i);
-                self.req(&peer.state.bitfield);
+                global.req(&peer.state.bitfield);
             },
             Message::Choke => {
                 peer.state.set_us_choked(true);
@@ -277,7 +277,7 @@ impl Handler for DefaultHandler {
                 for (index, byte) in bitfield.iter().enumerate() {
                     for i in 0..8 { //cast up so i don't have to deal with overflows
                         let n = 1 & (((*byte as u16) << i) >> (8-i));
-                        self.gpc_incr(index*8+i, n);
+                        global.gpc_incr(index*8+i, n);
                     }
                 }
                 peer.state.set_bitfield(bitfield);
@@ -287,7 +287,7 @@ impl Handler for DefaultHandler {
                 let request = peer.get_request(&candidates);
                 */
 
-                self.req(&peer.state.bitfield);
+                global.req(&peer.state.bitfield);
             },
             _ => {
             }

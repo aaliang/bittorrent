@@ -13,34 +13,40 @@ use bittorrent::bt_messages::Message;
 use bittorrent::buffered_reader::BufferedReader;
 use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
 use bittorrent::peer::{connect_to_peer, gen_rand_peer_id, Peer};
-use bittorrent::default_handler::{Handler, DefaultHandler};
+use bittorrent::default_handler::{Handler, DefaultHandler, GlobalState};
 
 // Sets up a sink pool. it functions similarly to an Actor
 /// atm, rust doesn't support HKTs
 /// TODO: the Handler now stores state... so some assumptions no longer hold
 ///
-fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>)>, JoinHandle<()>) {
+fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
         loop {
-            let (message, cell): (Message, Arc<Mutex<Peer>>) = rx.recv().unwrap();
+            let (message, cell, gs_arc): (Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>) = rx.recv().unwrap();
 
             let mut peer_mut_guard = cell.deref().lock().unwrap();
             let mut peer = peer_mut_guard.deref_mut();
 
-            let _ = handler.handle(message, peer);
+            let mut gs_guard = gs_arc.deref().lock().unwrap();
+            let mut gs = gs_guard.deref_mut();
+
+            let _ = handler.handle(message, peer, gs);
         }
     });
     (tx, sink)
 }
 
 /// Sets up a transmission based on a single torrent
-fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
         Some(peers) => peers,
         _ => panic!("cannot get peers from tracker")
     };
+
+    let global_state = GlobalState::new(metadata.piece_length.clone() as usize);
+    let global_arc = Arc::new(Mutex::new(global_state));
 
     println!("got {} peers", peers.len());
 
@@ -48,6 +54,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
         let child_meta = metadata.clone();
         let peer_id = peer_id.clone();
         let tx = tx.clone();
+        let ga = global_arc.clone();
         thread::spawn(move || {
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((peer_id, mut reader)) => {
@@ -55,14 +62,13 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>)>, metadata: &Metadata, 
                     let mut peer = Peer::new(peer_id_str, reader.clone_stream());
                     peer.send_message(Message::Interested);
                     peer.state.set_us_interested(true);
-
                     let arc = Arc::new(Mutex::new(peer));
                     loop {
                         //we can't just block read in a loop - we'll never have a chance to send out
                         //outgoing messages over TCP
                         match reader.wait_for_message() {
                             Ok(message) => {
-                                let _ = tx.send((message, arc.clone()));
+                                let _ = tx.send((message, arc.clone(), ga.clone()));
                             },
                             Err(e) => {
                                 println!("error waiting for message: {:?}", e);
@@ -94,8 +100,7 @@ fn main () {
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
-    let handler = DefaultHandler::new(metadata.piece_length as usize);
-    let (tx, sink) = init(handler);
+    let (tx, sink) = init(DefaultHandler);
 
     //for now initialize torrents inline with main
     init_torrent(&tx, &metadata, 6887, 0);
