@@ -1,9 +1,11 @@
 use bt_messages::Message;
 use buffered_reader::BufferedReader;
+use peer::{Peer};
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
 use std::io::Write;
 use std::cmp::Ordering;
+
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 
 #[derive(PartialEq, Debug, Clone)]
@@ -117,7 +119,6 @@ impl DefaultHandler {
                     x => {
                         let n = if x > 8 - bitmap_offset { 8 -bitmap_offset} else {x};
                         bitmap_offset += n;
-
                         match a_start {
                             Some(_) => {
                                 let end = Position::new((bitmap_byte_num as u32 * 8 + bitmap_offset - n as u32) as usize, 0);
@@ -125,8 +126,7 @@ impl DefaultHandler {
                                 a_start = None;
                             },
                             None => {}
-                        }
-
+                        };
                         remainder = remainder << n;
                     }
                 };
@@ -139,11 +139,8 @@ impl DefaultHandler {
                                 a_start = Some(Position::new((bitmap_byte_num as u32 * 8 + bitmap_offset as u32) as usize, 0));
                             }
                         }
-
                         bitmap_offset += n;
-                        println!("br: {}", remainder);
                         remainder = remainder << n;
-                        println!("{}, shifted {}", remainder, n);
                     }
                 };
                 if bitmap_offset == 8 {
@@ -152,7 +149,6 @@ impl DefaultHandler {
                 };
             }
         }
-
         match a_start {
             Some(_) => {
                 vec.push((
@@ -322,6 +318,15 @@ impl DefaultHandler {
     }
 }
 
+trait Spin {
+    fn spin ();
+}
+
+impl Spin for DefaultHandler {
+    fn spin () {
+    }
+}
+
 /// The default algorithm
 impl Handler for DefaultHandler {
     type MessageType = Message;
@@ -364,84 +369,6 @@ impl Handler for DefaultHandler {
             }
         };
     }
-}
-
-pub struct Peer {
-    pub id: String,
-    stream: TcpStream,
-    pub state: State
-}
-
-impl Peer {
-    pub fn new (id:String, stream: TcpStream) -> Peer {
-        Peer {
-            id: id,
-            stream: stream,
-            state: State::new()
-        }
-    }
-
-    pub fn send_message (&mut self, message: Message) {
-        let as_bytes = message.to_byte_array();
-        let _ = self.stream.write_all(&as_bytes);
-    }
-}
-
-#[derive(Debug)]
-pub struct State {
-    //are we choked by them?
-    pub us_choked: bool,
-    //are we interested in them?
-    pub us_interested: bool,
-    //are they choked by us?
-    pub is_choked: bool,
-    //are they interested in us?
-    pub is_interested: bool,
-    //the intention is that eventually we will support growable files. so going with vector
-    pub bitfield: Vec<u8>
-}
-
-impl State {
-    pub fn new () -> State {
-        State {
-            us_choked: true,
-            us_interested: false,
-            is_choked: true,
-            is_interested: false,
-            bitfield: vec![]
-        }
-    }
-
-    pub fn set_us_interested (&mut self, us_interested: bool) {
-        self.us_interested = us_interested;
-    }
-
-    pub fn set_bitfield (&mut self, bitfield: Vec<u8>) {
-        self.bitfield = bitfield;
-    }
-
-    pub fn set_have (&mut self, index: usize) {
-        set_have_bitfield(&mut self.bitfield, index);
-    }
-
-    pub fn set_us_choked (&mut self, us_choked: bool) {
-        self.us_choked = us_choked;
-    }
-}
-
-#[inline]
-fn set_have_bitfield (bitfield: &mut Vec<u8>, index: usize) {
-    let chunk_index = index/8;
-    let chunk_posit = index % 8;
-    let chunk_mask = 128 >> chunk_posit;
-
-    //bounds check needs to be here because the bitfield is a variable size - which we want in
-    //the future
-    if chunk_index+1 > bitfield.len() {
-        bitfield.extend((0..chunk_index).map(|_| 0));
-    }
-
-    bitfield[chunk_index] = bitfield[chunk_index] | chunk_mask;
 }
 
 /// Zip-maps a generic func over two byte slices with variable lengths

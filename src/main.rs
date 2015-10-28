@@ -12,8 +12,8 @@ use bittorrent::metadata::{MetadataDict, Metadata};
 use bittorrent::bt_messages::Message;
 use bittorrent::buffered_reader::BufferedReader;
 use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
-use bittorrent::peer::{connect_to_peer, gen_rand_peer_id};
-use bittorrent::default_handler::{Handler, DefaultHandler, Peer};
+use bittorrent::peer::{connect_to_peer, gen_rand_peer_id, Peer};
+use bittorrent::default_handler::{Handler, DefaultHandler};
 
 // Sets up a sink pool. it functions similarly to an Actor
 /// atm, rust doesn't support HKTs
