@@ -318,15 +318,6 @@ impl DefaultHandler {
     }
 }
 
-trait Spin {
-    fn spin ();
-}
-
-impl Spin for DefaultHandler {
-    fn spin () {
-    }
-}
-
 /// The default algorithm
 impl Handler for DefaultHandler {
     type MessageType = Message;

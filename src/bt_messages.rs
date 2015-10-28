@@ -13,7 +13,8 @@ pub enum Message {
     Request {index: u32, begin: u32, length: u32},
     Piece {index: u32, begin: u32, block: Vec<u8>},
     Cancel {index: u32, begin: u32, length: u32},
-    Port(u16)
+    Port(u16),
+    Spin //used internally. TODO: remove when there's a dediated spin thread
 }
 
 //this is kind of lazy. but it also makes reading/writing Messages symmetrical...

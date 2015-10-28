@@ -2,7 +2,7 @@ extern crate bencode;
 extern crate bittorrent;
 
 use std::{env, thread};
-use std::thread::JoinHandle;
+use std::thread::{JoinHandle};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::net::TcpStream;
@@ -19,17 +19,19 @@ use bittorrent::default_handler::{Handler, DefaultHandler};
 /// atm, rust doesn't support HKTs
 /// TODO: the Handler now stores state... so some assumptions no longer hold
 ///
-fn init <'a> (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>)>, JoinHandle<()>) {
+fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
         loop {
             let (message, cell): (Message, Arc<Mutex<Peer>>) = rx.recv().unwrap();
+
             let mut peer_mut_guard = cell.deref().lock().unwrap();
             let mut peer = peer_mut_guard.deref_mut();
 
             let _ = handler.handle(message, peer);
         }
     });
+    //TODO: the sink join handle is probably no longer useful
     (tx, sink)
 }
 
@@ -93,10 +95,18 @@ fn main () {
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
-    let (tx, sink) = init(DefaultHandler::new(metadata.piece_length as usize));
+    let handler = DefaultHandler::new(metadata.piece_length as usize);
+    let (tx, sink) = init(handler);
 
     //for now initialize torrents inline with main
     init_torrent(&tx, &metadata, 6887, 0);
+
+    let spin_thread = thread::spawn(|| {
+        loop {
+            thread::sleep_ms(500);
+            println!("SPINNING");
+        }
+    });
 
     //block until the sink shuts down
     let _ = sink.join();
