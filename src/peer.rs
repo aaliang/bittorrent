@@ -5,6 +5,7 @@ use metadata::Metadata;
 use buffered_reader::BufferedReader;
 use bt_messages::Message;
 use tracker::{Address, PEER_ID_LENGTH};
+use chunk::Piece;
 
 /// Contains functionality required to setup and exchange messages with a peer
 
@@ -43,7 +44,9 @@ pub struct State {
     //are they interested in us?
     pub is_interested: bool,
     //the intention is that eventually we will support growable files. so going with vector
-    pub bitfield: Vec<u8>
+    pub bitfield: Vec<u8>,
+
+    pub pieces: Vec<Piece>
 }
 
 impl State {
@@ -53,7 +56,8 @@ impl State {
             us_interested: false,
             is_choked: true,
             is_interested: false,
-            bitfield: vec![]
+            bitfield: vec![],
+            pieces: vec![]
         }
     }
 
@@ -64,6 +68,10 @@ impl State {
     pub fn set_bitfield (&mut self, bitfield: Vec<u8>) {
         self.bitfield = bitfield;
     }
+
+    /*pub fn set_pieces_from_bitfield (&mut self, bitfield: Vec<u8>) {
+        self.pieces = Pieces
+    }*/
 
     pub fn set_have (&mut self, index: usize) {
         set_have_bitfield(&mut self.bitfield, index);
