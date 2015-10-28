@@ -2,6 +2,7 @@ extern crate bencode;
 extern crate bittorrent;
 
 use std::{env, thread};
+use std::cell::RefCell;
 use std::thread::{JoinHandle};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
@@ -19,26 +20,25 @@ use bittorrent::default_handler::{Handler, DefaultHandler, GlobalState};
 /// atm, rust doesn't support HKTs
 /// TODO: the Handler now stores state... so some assumptions no longer hold
 ///
-fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>)>, JoinHandle<()>) {
+fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<Mutex<RefCell<Peer>>>, Arc<Mutex<GlobalState>>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
         loop {
-            let (message, cell, gs_arc): (Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>) = rx.recv().unwrap();
+            let (message, cell, gs_arc): (Message, Arc<Mutex<RefCell<Peer>>>, Arc<Mutex<GlobalState>>) = rx.recv().unwrap();
 
             let mut peer_mut_guard = cell.deref().lock().unwrap();
             let mut peer = peer_mut_guard.deref_mut();
 
             let mut gs_guard = gs_arc.deref().lock().unwrap();
             let mut gs = gs_guard.deref_mut();
-
-            let _ = handler.handle(message, peer, gs);
+            let _ = handler.handle(message, &mut peer.borrow_mut(), gs);
         }
     });
     (tx, sink)
 }
 
 /// Sets up a transmission based on a single torrent
-fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
+fn init_torrent (tx: &Sender<(Message, Arc<Mutex<RefCell<Peer>>>, Arc<Mutex<GlobalState>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
         Some(peers) => peers,
@@ -60,18 +60,20 @@ fn init_torrent (tx: &Sender<(Message, Arc<Mutex<Peer>>, Arc<Mutex<GlobalState>>
             match connect_to_peer(peer, &child_meta, &peer_id) {
                 Ok((peer_id, mut reader)) => {
                     let peer_id_str = peer_id.iter().map(|x| *x as char).collect::<String>();
-                    let mut peer = Peer::new(peer_id_str, reader.clone_stream());
-                    peer.send_message(Message::Interested);
+                    let mut peer = Peer::new(peer_id_str);
+                    //peer.send_message(Message::Interested);
                     peer.state.set_us_interested(true);
 
-                    let arc = Arc::new(Mutex::new(peer));
-                
+                    let peer_cell = RefCell::new(peer);
+
                     { //add to the global peer list
                         let _ga = ga.clone();
                         let mut _y = (&_ga).lock().unwrap();
                         let mut _x = _y.deref_mut();
-                        _x.add_new_peer(arc.clone());
+                        _x.add_new_peer(peer_cell.clone(), reader.clone_stream());
                     } //release da lock
+
+                    let arc = Arc::new(Mutex::new(peer_cell));
 
                     loop {
                         //we can't just block read in a loop - we'll never have a chance to send out

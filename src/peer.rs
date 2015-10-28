@@ -8,28 +8,22 @@ use tracker::{Address, PEER_ID_LENGTH};
 
 /// Contains functionality required to setup and exchange messages with a peer
 
+#[derive(Clone)]
 pub struct Peer {
     pub id: String,
-    stream: TcpStream,
     pub state: State
 }
 
 impl Peer {
-    pub fn new (id:String, stream: TcpStream) -> Peer {
+    pub fn new (id:String) -> Peer {
         Peer {
             id: id,
-            stream: stream,
             state: State::new()
         }
     }
-
-    pub fn send_message (&mut self, message: Message) {
-        let as_bytes = message.to_byte_array();
-        let _ = self.stream.write_all(&as_bytes);
-    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct State {
     //are we choked by them?
     pub us_choked: bool,

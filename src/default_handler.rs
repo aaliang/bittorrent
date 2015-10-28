@@ -2,6 +2,7 @@ use bt_messages::Message;
 use buffered_reader::BufferedReader;
 use chunk::{Position, Piece};
 use peer::Peer;
+use std::cell::{RefCell, RefMut};
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
 use std::io::Write;
@@ -16,7 +17,7 @@ pub struct GlobalState {
     pub request_map: Vec<u8>,
     s_request_map: Vec<u8>,
     piece_length: usize,
-    peer_list: Vec<Arc<Mutex<Peer>>>
+    peer_list: Vec<(RefCell<Peer>, TcpStream)>
 }
 
 impl GlobalState {
@@ -31,8 +32,8 @@ impl GlobalState {
         }
     }
 
-    pub fn add_new_peer (&mut self, peer: Arc<Mutex<Peer>>) {
-        self.peer_list.push(peer);
+    pub fn add_new_peer (&mut self, peer: RefCell<Peer>, stream: TcpStream) {
+        self.peer_list.push((peer, stream));
     }
 
     /// Increases the value of gpc[piece_index] by n
@@ -115,7 +116,7 @@ impl GlobalState {
 /// Handles messages. This is a cheap way to force reactive style
 pub trait Handler {
     type MessageType;
-    fn handle(&mut self, message: Self::MessageType, peer: &mut Peer, global_state: &mut GlobalState);
+    fn handle(&mut self, message: Self::MessageType, peer: &mut RefMut<Peer>, global_state: &mut GlobalState);
 }
 
 pub struct DefaultHandler;
@@ -261,7 +262,7 @@ impl DefaultHandler {
 impl Handler for DefaultHandler {
     type MessageType = Message;
     #[inline]
-    fn handle (&mut self, message: Message, peer: &mut Peer, global: &mut GlobalState) {
+    fn handle (&mut self, message: Message, peer: &mut RefMut<Peer>, global: &mut GlobalState) {
         println!("{:?}", message);
         match message {
             Message::Have{piece_index: index} => {
