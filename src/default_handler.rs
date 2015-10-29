@@ -2,12 +2,8 @@ use bt_messages::Message;
 use buffered_reader::BufferedReader;
 use chunk::{Position, Piece};
 use peer::{Peer, SendPeerMessage};
-use std::cell::{RefCell, RefMut};
 use std::net::TcpStream;
-use std::sync::mpsc::Sender;
-use std::io::Write;
-use std::sync::{Arc, Mutex, RwLock};
-use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, RwLock};
 
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 

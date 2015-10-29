@@ -2,16 +2,13 @@ extern crate bencode;
 extern crate bittorrent;
 
 use std::{env, thread};
-use std::cell::RefCell;
 use std::thread::{JoinHandle};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, RwLock};
-use std::net::TcpStream;
 use std::ops::{Deref, DerefMut};
-use bencode::{deserialize_file, Bencode};
-use bittorrent::metadata::{MetadataDict, Metadata};
+use bittorrent::metadata::{Metadata, MetadataDict};
+use bencode::{Bencode, deserialize_file};
 use bittorrent::bt_messages::Message;
-use bittorrent::buffered_reader::BufferedReader;
 use bittorrent::tracker::{get_http_tracker_peers, PEER_ID_PREFIX};
 use bittorrent::peer::{connect_to_peer, gen_rand_peer_id, Peer, SendPeerMessage};
 use bittorrent::default_handler::{Handler, DefaultHandler, GlobalState, Spin};
@@ -134,4 +131,16 @@ fn main () {
 
     //block until the sink shuts down
     let _ = sink.join();
+    //test_convert_bitfield_to_piece_vec();
+}
+
+use bittorrent::chunk::*;
+
+pub fn test_convert_bitfield_to_piece_vec() {
+    let p = Piece::convert_bitfield_to_piece_vec(&vec![1, 1]);
+    assert_eq!(p, vec![Piece::new(Position::new(7, 0), Position::new(8, 0)),
+                      Piece::new(Position::new(15, 0), Position::new(16, 0))]);
+
+    let a = Piece::convert_bitfield_to_piece_vec(&vec![128]);
+    assert_eq!(a, vec![Piece::new(Position::new(0, 0), Position::new(1, 0))]);
 }
