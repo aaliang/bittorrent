@@ -69,7 +69,7 @@ impl Piece {
         let mut a_start = None;
         for (bitmap_byte_num, byte) in bitfield.iter().enumerate() {
             let mut bitmap_offset = 0;
-            let mut remainder = byte.to_owned(); 
+            let mut remainder = byte.to_owned() as u16;
             loop {
                 match remainder.leading_zeros() {
                     0 => (),
@@ -84,7 +84,7 @@ impl Piece {
                             },
                             None => {}
                         };
-                        remainder = remainder << n;
+                        remainder = (remainder << n) & 255;
                     }
                 };
                 match (!remainder).leading_zeros() { //leading 1's after shifting
@@ -97,7 +97,9 @@ impl Piece {
                             }
                         }
                         bitmap_offset += n;
-                        remainder = remainder << n;
+                        println!("rem: {}", remainder);
+                        println!("n: {}", n);
+                        remainder = (remainder << n) & 255;
                     }
                 };
                 if bitmap_offset == 8 {
@@ -122,7 +124,7 @@ impl Piece {
     pub fn compact_if_possible(arr: &mut Vec<Piece>, index: usize) {
         let res = {
             let ref el = arr[index];
-            match ((arr.get(index-1), arr.get(index+1))) {
+            match (arr.get(index-1), arr.get(index+1)) {
                 (Some(ref left), Some(ref right)) if left.end == el.start && el.end == right.start => {
                     Some((index-1, index+1, Piece::new(left.start.clone(), right.end.clone())))},
                 (Some(ref left), _) if left.end == el.start => {

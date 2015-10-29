@@ -167,8 +167,9 @@ impl Handler for DefaultHandler {
                         global.gpc_incr(index*8+i, n);
                     }
                 }
+
+                peer.state.set_pieces_from_bitfield(&bitfield);
                 peer.state.set_bitfield(bitfield);
-                //peer.state.set_pieces_from_bitfield(bitfield);
             },
             _ => {
             }

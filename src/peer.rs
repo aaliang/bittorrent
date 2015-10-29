@@ -69,9 +69,9 @@ impl State {
         self.bitfield = bitfield;
     }
 
-    /*pub fn set_pieces_from_bitfield (&mut self, bitfield: Vec<u8>) {
-        self.pieces = Pieces
-    }*/
+    pub fn set_pieces_from_bitfield (&mut self, bitfield: &[u8]) {
+        self.pieces = Piece::convert_bitfield_to_piece_vec(bitfield);
+    }
 
     pub fn set_have (&mut self, index: usize) {
         set_have_bitfield(&mut self.bitfield, index);
