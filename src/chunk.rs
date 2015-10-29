@@ -74,7 +74,6 @@ impl Piece {
                 match remainder.leading_zeros() {
                     0 => (),
                     x => {
-                        println!("x: {}", x);
                         let n = if x > 8 - bitmap_offset { 8 - bitmap_offset} else {x};
                         bitmap_offset += n;
                         match a_start {
@@ -85,9 +84,7 @@ impl Piece {
                             },
                             None => {}
                         };
-                        println!("shift {}", n);
                         remainder = (((remainder as u16) << n) & 255) as u8;
-                        println!("RR: {}", remainder);
                     }
                 };
                 match (!remainder).leading_zeros() { //leading 1's after shifting
@@ -100,8 +97,6 @@ impl Piece {
                             }
                         }
                         bitmap_offset += n;
-                        println!("rem: {}", remainder);
-                        println!("n: {}", n);
                         remainder = (((remainder as u16 )<< n) & 255) as u8;
                     }
                 };
@@ -127,7 +122,12 @@ impl Piece {
     pub fn compact_if_possible(arr: &mut Vec<Piece>, index: usize) {
         let res = {
             let ref el = arr[index];
-            match (arr.get(index-1), arr.get(index+1)) {
+
+            let tup = match index {
+                0 => (None, arr.get(index+1)),
+                _ => (arr.get(index-1), arr.get(index+1))
+            };
+            match tup {
                 (Some(ref left), Some(ref right)) if left.end == el.start && el.end == right.start => {
                     Some((index-1, index+1, Piece::new(left.start.clone(), right.end.clone())))},
                 (Some(ref left), _) if left.end == el.start => {

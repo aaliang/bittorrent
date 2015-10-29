@@ -10,6 +10,7 @@ const BLOCK_LENGTH:usize = 16384; //block length in bytes
 pub struct GlobalState {
     gpc: Vec<u16>,
     pub owned: Vec<u8>,
+    pub owned_pieces: Vec<Piece>,
     pub request_map: Vec<u8>,
     s_request_map: Vec<u8>,
     piece_length: usize,
@@ -21,6 +22,7 @@ impl GlobalState {
         GlobalState {
             gpc: vec![],
             owned: vec![],
+            owned_pieces: vec![],
             request_map: vec![],
             s_request_map: vec![],
             peer_list: vec![],
@@ -121,7 +123,6 @@ impl Spin for GlobalState {
         println!("len: {}", self.peer_list.len());
         for tup in self.peer_list.iter() {
             let (ref peer, _) = *tup;
-            
             //peer
             println!("P#S {:?}", peer);
         }
@@ -145,7 +146,10 @@ impl Handler for DefaultHandler {
                 let i = index as usize;
                 global.gpc_incr(i, 1);
                 peer.state.set_have(i);
-                global.req(&peer.state.bitfield);
+                //global.req(&peer.state.bitfield);
+                let piece = Piece::from(BLOCK_LENGTH, i, 0, BLOCK_LENGTH);
+                let i_index = Piece::add_to_boundary_vec(&mut global.owned_pieces, piece);
+                Piece::compact_if_possible(&mut global.owned_pieces, i_index);
             },
             Message::Choke => {
                 peer.state.set_us_choked(true);
