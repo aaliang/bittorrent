@@ -125,7 +125,7 @@ fn main () {
             let mut guard = (&gs).lock().unwrap();
             (&mut guard).deref_mut().spin();
 
-            thread::sleep_ms(800);
+            thread::sleep_ms(2500);
         }
     });
 

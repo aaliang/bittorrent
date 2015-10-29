@@ -140,7 +140,7 @@ impl Piece {
         match res {
             Some((start_index, end_index, compacted_piece)) => {
                 for (n, i) in (start_index..end_index+1).enumerate() {
-                    arr.remove(n-i);
+                    arr.remove(i-n);
                 }
                 arr.insert(start_index, compacted_piece);
             },

@@ -4,6 +4,7 @@ use chunk::{Position, Piece};
 use peer::{Peer, SendPeerMessage};
 use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
+use std::ops::{Deref, DerefMut};
 
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 
@@ -145,8 +146,7 @@ impl Handler for DefaultHandler {
             Message::Have{piece_index: index} => {
                 let i = index as usize;
                 global.gpc_incr(i, 1);
-                peer.state.set_have(i);
-                //global.req(&peer.state.bitfield);
+                //peer.state.set_have(i);
                 let piece = Piece::from(BLOCK_LENGTH, i, 0, BLOCK_LENGTH);
                 let i_index = Piece::add_to_boundary_vec(&mut global.owned_pieces, piece);
                 Piece::compact_if_possible(&mut global.owned_pieces, i_index);
@@ -169,7 +169,7 @@ impl Handler for DefaultHandler {
                 }
 
                 peer.state.set_pieces_from_bitfield(&bitfield);
-                peer.state.set_bitfield(bitfield);
+                //peer.state.set_bitfield(bitfield);
             },
             _ => {
             }
