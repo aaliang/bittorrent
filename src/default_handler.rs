@@ -121,11 +121,11 @@ pub trait Spin {
 
 impl Spin for GlobalState {
     fn spin (&mut self) {
-        println!("len: {}", self.peer_list.len());
+        //println!("len: {}", self.peer_list.len());
         for tup in self.peer_list.iter() {
             let (ref peer, _) = *tup;
             //peer
-            println!("P#S {:?}", peer);
+            //println!("P#S {:?}", peer);
         }
     }
 }

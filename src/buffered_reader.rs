@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::io::Result;
+use std::io::{Error, ErrorKind};
 use std::net::TcpStream;
 use bt_messages::{Message, try_decode};
 
@@ -20,7 +21,7 @@ impl <T> BufferedReader <T> where T:Read {
         loop {
             let mut i_buff = [0; 512];
             match self.readable.read(&mut i_buff) {
-                Ok(0) => continue,
+                Ok(0) => return Err(Error::new(ErrorKind::Other, "graceful disconnect")),
                 Ok(bytes_read) => {
                     self.buffer.extend(i_buff[0..bytes_read].iter());
                     if self.buffer.len() >= 4 {
