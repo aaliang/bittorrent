@@ -100,7 +100,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>
     global_arc
 }
 
-/*fn main () {
+fn main () {
     let path = env::args().nth(1)
                           .unwrap_or_else(||panic!("no path to torrent provided"));
 
@@ -132,17 +132,5 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>
     //block until the sink shuts down
     let _ = sink.join();
     //test_convert_bitfield_to_piece_vec();
-}*/
-
-fn main () {
-    use bittorrent::chunk::{Piece, Position};
-
-    let a = vec![
-        Piece::new(Position::new(0, 0), Position::new(3, 0))
-        ];
-
-    let b = vec![
-        Piece::new(Position::new(0, 0), Position::new(1, 0))
-    ];
-    Piece::complement(a, b);
 }
+

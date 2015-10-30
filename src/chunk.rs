@@ -216,9 +216,9 @@ impl Piece {
 
 
     /// Yields the relative set complement of A in B. The vector should be compacted
-    pub fn complement(a: Vec<Piece>, b: Vec<Piece>) -> Vec<Piece> {
-        let mut a_ptr = a.clone(); //TODO: need to come up with a better abstraction for lists
-        let mut b_ptr = b.clone(); //for now go the inefficient route
+    pub fn complement(a: &[Piece], b: &[Piece]) -> Vec<Piece> {
+        let mut a_ptr = a.to_owned(); //TODO: need to come up with a better abstraction for lists
+        let mut b_ptr = b.to_owned(); //for now go the inefficient route
         let mut vec = vec![];
 
         loop {
@@ -235,8 +235,6 @@ impl Piece {
                             ItAction::AdvanceLeft
                         }
                         else { //a_end > b_end
-                            let new_piece = Piece::new(a_start.to_owned(), b_end.to_owned());
-                            vec.push(new_piece);
                             let new_left_head = Piece::new(b_end.to_owned(), a_end.to_owned());
                             ItAction::AdvanceRightNewHeadLeft(new_left_head)
                         }
@@ -300,7 +298,7 @@ impl Piece {
                     b_ptr.pop();
                 },
                 ItAction::AdvanceRightNewHeadLeft(hl) => {
-                    vec[0] = hl;
+                    a_ptr[0] = hl;
                     b_ptr.pop();
                 },
                 ItAction::ExtendWithLeftRemainder => {
@@ -309,7 +307,6 @@ impl Piece {
                 }
             }
         }
-        vec![]
     }
 }
 
