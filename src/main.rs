@@ -22,7 +22,6 @@ fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<RwLock<Peer>>, Ar
     let sink = thread::spawn(move|| {
         loop {
             let (message, cell, gs_arc): (Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>>) = rx.recv().unwrap();
-
             let mut peer_mut_guard = cell.deref().write().unwrap();
             let mut peer = peer_mut_guard.deref_mut();
 

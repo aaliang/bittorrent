@@ -119,28 +119,22 @@ pub trait Spin {
 
 impl Spin for GlobalState {
     fn spin (&mut self) {
-        println!("len: {}", self.peer_list.len());
 
         //NOTE: this shuffles the peer_list
         thread_rng().shuffle(&mut self.peer_list);
         for tup in self.peer_list.iter() {
             let (ref rw_lock_peer, _) = *tup;
-            //println!("reading");
-            match rw_lock_peer.try_read() { 
-                Ok(a) => println!("{:?}", a.deref()),
-                Err(a) => () //do nothing. it's locked
-            };
-            //let x = &peer;
-            //println!("{:?}", rw_lock_peer.deref());
-            /*
-            let peer_pieces = &peer.state.pieces;
 
-            //the pieces they have that we want
-            let want = Piece::complement(peer_pieces, &self.owned_pieces);
-
-            println!("want: {:?}", want);
-            //peer
-            //println!("P#S {:?}", peer);*/
+            {
+                let peer = match rw_lock_peer.try_read() { 
+                    Ok(a) => a,
+                    Err(_) => continue//do nothing. it's locked
+                };
+                //TODO: owned_pieces is not sufficient. it should be the union of owned_pieces and
+                //requests
+                let want = Piece::complement(&peer.deref().state.pieces, &self.owned_pieces);
+                println!("want: {:?}", want);
+            }
         }
     }
 }
