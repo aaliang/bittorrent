@@ -5,6 +5,7 @@ use peer::{Peer, SendPeerMessage};
 use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
 use std::ops::{Deref, DerefMut};
+use rand::{Rng, thread_rng};
 
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 
@@ -112,23 +113,40 @@ impl GlobalState {
     }
 }
 
-
-pub struct DefaultHandler;
-
 pub trait Spin {
     fn spin (&mut self);
 }
 
 impl Spin for GlobalState {
     fn spin (&mut self) {
-        //println!("len: {}", self.peer_list.len());
+        println!("len: {}", self.peer_list.len());
+
+        //NOTE: this shuffles the peer_list
+        thread_rng().shuffle(&mut self.peer_list);
         for tup in self.peer_list.iter() {
-            let (ref peer, _) = *tup;
+            let (ref rw_lock_peer, _) = *tup;
+            //println!("reading");
+            match rw_lock_peer.try_read() { 
+                Ok(a) => println!("{:?}", a.deref()),
+                Err(a) => () //do nothing. it's locked
+            };
+            //let x = &peer;
+            //println!("{:?}", rw_lock_peer.deref());
+            /*
+            let peer_pieces = &peer.state.pieces;
+
+            //the pieces they have that we want
+            let want = Piece::complement(peer_pieces, &self.owned_pieces);
+
+            println!("want: {:?}", want);
             //peer
-            //println!("P#S {:?}", peer);
+            //println!("P#S {:?}", peer);*/
         }
     }
 }
+
+
+pub struct DefaultHandler;
 
 /// Handles messages. This is a cheap way to force reactive style
 pub trait Handler {

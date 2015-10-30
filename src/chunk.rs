@@ -185,7 +185,7 @@ impl Piece {
                 let arr_index = (win_left+win_right)/2;
                 let something = {
                     let block = &arr[arr_index];
-                    let el_left = &arr[arr_index - 1];
+                    let el_left = if arr_index == 0 {None} else {Some(&arr[arr_index - 1])};
                     let el_right = arr.get(arr_index + 1);
                     if new_block.start >= block.end {
                         match el_right {
@@ -199,11 +199,18 @@ impl Piece {
                         }
                     }
                     else if new_block.end <= block.start {
-                        if new_block.start >= el_left.end {
-                            Some(arr_index)
-                        } else {
-                            win_right = arr_index - 1;
-                            None
+                        match el_left {
+                            None => {
+                                Some(0)
+                            },
+                            Some(a) => {
+                                if new_block.start >= a.end {
+                                    Some(arr_index)
+                                } else {
+                                    win_right = arr_index - 1;
+                                None
+                                }
+                            }
                         }
                     }
                     else { panic!("this is bad")}
