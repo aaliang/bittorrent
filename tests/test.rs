@@ -203,7 +203,19 @@ pub fn test_trivial_complement() {
         Piece::new(Position::new(0, 0), Position::new(1, 0))
     ];
 
-    let a = Piece::complement(&a, &b);
+    let c = Piece::complement(&a, &b);
 
-    assert_eq!(a, vec![Piece::new(Position::new(1, 0), Position::new(3, 0))]);
+    assert_eq!(c, vec![Piece::new(Position::new(1, 0), Position::new(3, 0))]);
+}
+
+#[test]
+pub fn test_complement_2 () {
+    let a = vec![
+        Piece::create((1, 0), (5, 0))
+    ];
+    let b = vec![
+        Piece::create((3, 0), (10, 0))
+    ];
+    let c = Piece::complement(&a, &b);
+    assert_eq!(c, vec![Piece::create((1, 0),(3, 0))]);
 }

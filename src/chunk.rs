@@ -39,7 +39,8 @@ enum ItAction {
     AdvanceLeft,
     AdvanceRight,
     AdvanceRightNewHeadLeft(Piece),
-    ExtendWithLeftRemainder
+    ExtendWithLeftRemainder,
+    NewLeftHead(Piece)
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -55,6 +56,14 @@ impl Piece {
             end: end
         }
     }
+
+    /// convenience method for above. allowing you to pass in a tuple instead of a Position
+    pub fn create (start: (usize, usize), end: (usize, usize)) -> Piece {
+        let (a, b) = start;
+        let (c, d) = end;
+        Self::new(Position::new(a, b), Position::new(c, d))
+    }
+
 
     //start is inclusive, end is exclusive
     pub fn from (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
@@ -214,7 +223,6 @@ impl Piece {
         }
     }
 
-
     /// Yields the relative set complement of A in B. The vector should be compacted
     pub fn complement(a: &[Piece], b: &[Piece]) -> Vec<Piece> {
         let mut a_ptr = a.to_owned(); //TODO: need to come up with a better abstraction for lists
@@ -257,9 +265,8 @@ impl Piece {
                             ItAction::AdvanceRightNewHeadLeft(new_a_head)
                         }
                         else { //b ends outside a's boundary
-                            let new_piece = Piece::new(a_start.to_owned(), b_start.to_owned());
-                            vec.push(new_piece);
-                            ItAction::AdvanceRight
+                            let new_left_head = Piece::new(b_start.to_owned(), a_end.to_owned());
+                            ItAction::NewLeftHead(new_left_head)
                         }
                     }
                     else if b_start < a_start {
@@ -304,6 +311,9 @@ impl Piece {
                 ItAction::ExtendWithLeftRemainder => {
                     vec.extend(a_ptr);
                     return vec
+                },
+                ItAction::NewLeftHead(hl) => {
+                    a_ptr[0] = hl;
                 }
             }
         }

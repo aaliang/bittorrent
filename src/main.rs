@@ -131,6 +131,5 @@ fn main () {
 
     //block until the sink shuts down
     let _ = sink.join();
-    //test_convert_bitfield_to_piece_vec();
 }
 
