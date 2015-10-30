@@ -228,7 +228,6 @@ impl Piece {
         let mut a_ptr = a.to_owned(); //TODO: need to come up with a better abstraction for lists
         let mut b_ptr = b.to_owned(); //for now go the inefficient route
         let mut vec = vec![];
-
         loop {
             let action = match (a_ptr.first(), b_ptr.first()) {
                 (Some(ref _a), Some(ref _b)) => {
@@ -288,25 +287,23 @@ impl Piece {
                 (Some(ref _a), None) => {
                     ItAction::ExtendWithLeftRemainder
                 },
-                _ => {
-                    return vec
-                }
+                _ => return vec
             };
 
             match action {
                 ItAction::AdvanceBoth => {
-                    a_ptr.pop();
-                    b_ptr.pop();
+                    a_ptr.remove(0);
+                    b_ptr.remove(0);
                 },
                 ItAction::AdvanceLeft => {
-                    a_ptr.pop();
+                    a_ptr.remove(0);
                 },
                 ItAction::AdvanceRight => {
-                    b_ptr.pop();
+                    b_ptr.remove(0);
                 },
                 ItAction::AdvanceRightNewHeadLeft(hl) => {
                     a_ptr[0] = hl;
-                    b_ptr.pop();
+                    b_ptr.remove(0);
                 },
                 ItAction::ExtendWithLeftRemainder => {
                     vec.extend(a_ptr);
@@ -316,6 +313,20 @@ impl Piece {
                     a_ptr[0] = hl;
                 }
             }
+        }
+    }
+
+    //this calls complement twice, can be optimized to be done inline. (without using complement)
+    pub fn intersection (a: &[Piece], b: &[Piece]) -> Vec<Piece> {
+        match (a.last(), b.last()) {
+            (Some(ref a_last), Some(ref b_last)) => {
+                let end = if a_last.end >= b_last.end {a_last} else {b_last};
+                let b_inverse = Piece::complement(&[Piece::new(Position::new(0, 0), end.end.clone())], b);
+                println!("binverse: {:?}", b_inverse);
+                Piece::complement(a, &b_inverse)
+
+            },
+            _ => vec![]
         }
     }
 }

@@ -219,3 +219,37 @@ pub fn test_complement_2 () {
     let c = Piece::complement(&a, &b);
     assert_eq!(c, vec![Piece::create((1, 0),(3, 0))]);
 }
+
+#[test]
+fn test_complement_3 () {
+    let a = vec![
+        Piece::create((1, 0), (10, 0))
+        ];
+
+    let b = vec![
+        Piece::create((1, 0), (3, 0)),
+        Piece::create((5, 0), (10, 0))
+        ];
+
+    let c = Piece::complement(&a, &b);
+
+    assert_eq!(c, vec![Piece::create((3, 0), (5, 0))]);
+}
+
+#[test]
+fn test_intersection () {
+    let a = vec![
+        Piece::create((1, 0), (10, 0))
+        ];
+
+    let b = vec![
+        Piece::create((3, 0), (5, 0))
+        ];
+
+    let c = Piece::intersection(&a, &b);
+
+    assert_eq!(c, vec![Piece::create((3, 0), (5, 0))]);
+
+}
+
+
