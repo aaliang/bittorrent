@@ -33,6 +33,15 @@ impl PartialOrd for Position {
     }
 }
 
+
+enum ItAction {
+    AdvanceBoth,
+    AdvanceLeft,
+    AdvanceRight,
+    AdvanceRightNewHeadLeft(Piece),
+    ExtendWithLeftRemainder
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Piece {
     pub start: Position,
@@ -117,6 +126,9 @@ impl Piece {
         vec
     }
 
+
+    //TODO: it may be better to pimp the following operations on Vec<Piece> into a trait. but for
+    //now they're static
     ///attempts to compact the piece indexed by {index} with elements to its left and right
     #[inline]
     pub fn compact_if_possible(arr: &mut Vec<Piece>, index: usize) {
@@ -203,5 +215,101 @@ impl Piece {
     }
 
 
+    /// Yields the relative set complement of A in B. The vector should be compacted
+    pub fn complement(a: Vec<Piece>, b: Vec<Piece>) -> Vec<Piece> {
+        let mut a_ptr = a.clone(); //TODO: need to come up with a better abstraction for lists
+        let mut b_ptr = b.clone(); //for now go the inefficient route
+        let mut vec = vec![];
+
+        loop {
+            let action = match (a_ptr.first(), b_ptr.first()) {
+                (Some(ref _a), Some(ref _b)) => {
+                    let (a_start, a_end) = (&_a.start, &_a.end);
+                    let (b_start, b_end) = (&_b.start, &_b.end);
+
+                    if a_start == b_start {
+                        if a_end == b_end {
+                            ItAction::AdvanceBoth
+                        }
+                        else if a_end < b_end {
+                            ItAction::AdvanceLeft
+                        }
+                        else { //a_end > b_end
+                            let new_piece = Piece::new(a_start.to_owned(), b_end.to_owned());
+                            vec.push(new_piece);
+                            let new_left_head = Piece::new(b_end.to_owned(), a_end.to_owned());
+                            ItAction::AdvanceRightNewHeadLeft(new_left_head)
+                        }
+                    }
+                    else if b_start >= a_end {
+                        vec.push(_a.to_owned().clone());
+                        ItAction::AdvanceLeft
+                    }
+                    else if a_start >= b_end {
+                        ItAction::AdvanceRight
+                    }
+                    else if a_start < b_start { //if b begins within a's boundary
+                        let new_piece = Piece::new(a_start.to_owned(), b_start.to_owned());
+                        vec.push(new_piece);
+                        if b_end == a_end {
+                            ItAction::AdvanceBoth
+                        }
+                        else if b_end < a_end {//b is contained within a
+                            let new_a_head = Piece::new(b_end.to_owned(), a_end.to_owned());
+                            ItAction::AdvanceRightNewHeadLeft(new_a_head)
+                        }
+                        else { //b ends outside a's boundary
+                            let new_piece = Piece::new(a_start.to_owned(), b_start.to_owned());
+                            vec.push(new_piece);
+                            ItAction::AdvanceRight
+                        }
+                    }
+                    else if b_start < a_start {
+                        if b_end == a_end {
+                            ItAction::AdvanceBoth
+                        }
+                        else if b_end < a_end {
+                            let new_a_head = Piece::new(b_end.to_owned(), a_end.to_owned());
+                            ItAction::AdvanceRightNewHeadLeft(new_a_head)
+                        }
+                        else { //b_end > a_end
+                            ItAction::AdvanceLeft
+                        }
+                    }
+                    else {
+                        panic!("this should not happen");//todo remove conditional clause if above
+                    }
+                },
+                (Some(ref _a), None) => {
+                    ItAction::ExtendWithLeftRemainder
+                },
+                _ => {
+                    return vec
+                }
+            };
+
+            match action {
+                ItAction::AdvanceBoth => {
+                    a_ptr.pop();
+                    b_ptr.pop();
+                },
+                ItAction::AdvanceLeft => {
+                    a_ptr.pop();
+                },
+                ItAction::AdvanceRight => {
+                    b_ptr.pop();
+                },
+                ItAction::AdvanceRightNewHeadLeft(hl) => {
+                    vec[0] = hl;
+                    b_ptr.pop();
+                },
+                ItAction::ExtendWithLeftRemainder => {
+                    vec.extend(a_ptr);
+                    return vec
+                }
+            }
+        }
+        vec![]
+    }
 }
 
