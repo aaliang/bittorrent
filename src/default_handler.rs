@@ -14,6 +14,7 @@ pub struct GlobalState {
     pub owned: Vec<u8>,
     pub owned_pieces: Vec<Piece>,
     pub request_map: Vec<u8>,
+    pub exclude: Vec<Piece>,
     s_request_map: Vec<u8>,
     piece_length: usize,
     peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream)>
@@ -25,6 +26,7 @@ impl GlobalState {
             gpc: vec![],
             owned: vec![],
             owned_pieces: vec![],
+            exclude: vec![],
             request_map: vec![],
             s_request_map: vec![],
             peer_list: vec![],
@@ -124,7 +126,6 @@ impl Spin for GlobalState {
         thread_rng().shuffle(&mut self.peer_list);
         for tup in self.peer_list.iter() {
             let (ref rw_lock_peer, _) = *tup;
-
             {
                 let peer = match rw_lock_peer.try_read() { 
                     Ok(a) => a,
@@ -132,13 +133,24 @@ impl Spin for GlobalState {
                 };
                 //TODO: owned_pieces is not sufficient. it should be the union of owned_pieces and
                 //requests
-                let want = Piece::complement(&peer.deref().state.pieces, &self.owned_pieces);
-                println!("want: {:?}", want);
+                let want = Piece::complement(&peer.deref().state.pieces, &self.exclude);
+                let req_piece = match want.len() {
+                    0 => continue,
+                    _ => select_piece(&want, BLOCK_LENGTH)
+                };
+
+                println!("{:?}", req_piece);
+
+                let index = Piece::add_to_boundary_vec(&mut self.exclude, req_piece);
+                Piece::compact_if_possible(&mut self.exclude, index);
             }
         }
     }
 }
 
+fn select_piece (pieces: &[Piece], piece_length: usize) -> Piece {
+    pieces.first().unwrap().to_owned()
+}
 
 pub struct DefaultHandler;
 
