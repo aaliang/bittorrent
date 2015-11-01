@@ -1,3 +1,5 @@
+extern crate time;
+
 use bt_messages::Message;
 use buffered_reader::BufferedReader;
 use chunk::{Position, Piece};
@@ -17,7 +19,7 @@ pub struct GlobalState {
     pub exclude: Vec<Piece>,
     s_request_map: Vec<u8>,
     piece_length: usize,
-    peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream)>
+    peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream, i64)>
 }
 
 impl GlobalState {
@@ -35,7 +37,8 @@ impl GlobalState {
     }
 
     pub fn add_new_peer (&mut self, peer: Arc<RwLock<Peer>>, stream: TcpStream) {
-        self.peer_list.push((peer, stream));
+        let last_checkin = time::get_time().sec;
+        self.peer_list.push((peer, stream, last_checkin));
     }
 
     /// Increases the value of gpc[piece_index] by n
@@ -121,12 +124,19 @@ pub trait Spin {
 
 impl Spin for GlobalState {
     fn spin (&mut self) {
-
         //NOTE: this shuffles the peer_list
         thread_rng().shuffle(&mut self.peer_list);
-        for tup in self.peer_list.iter() {
-            let (ref rw_lock_peer, _) = *tup;
+
+        for tup in self.peer_list.iter_mut() {
+            let (ref rw_lock_peer, ref mut peer_socket, ref mut timestamp) = *tup;
             {
+                let now = time::get_time().sec;
+                if timestamp < &mut(now - 120) {
+                    println!("keepalive");
+                    peer_socket.send_message(Message::KeepAlive);
+                    *timestamp = now; 
+                }
+
                 let peer = match rw_lock_peer.try_read() { 
                     Ok(a) => a,
                     Err(_) => continue//do nothing. it's locked
