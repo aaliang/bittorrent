@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Position {
-    index: usize,
-    offset: usize
+    pub index: usize,
+    pub offset: usize
 }
 
 impl Position {
@@ -32,7 +32,6 @@ impl PartialOrd for Position {
          }
     }
 }
-
 
 enum ItAction {
     AdvanceBoth,
@@ -69,13 +68,18 @@ impl Piece {
     pub fn from (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
         let num_whole_pieces = bytes/piece_length;
         let rem_offset = (offset + bytes) % piece_length;
+        let carry = if (offset+bytes)/piece_length > 0 {
+            1
+        } else {
+            0
+        };
 
         let start = Position {
             index: index,
             offset: offset
         };
         let end = Position {
-            index: index + num_whole_pieces,
+            index: index + num_whole_pieces + carry,
             offset: rem_offset
         };
 

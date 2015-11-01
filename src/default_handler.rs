@@ -136,7 +136,7 @@ impl Spin for GlobalState {
                 let want = Piece::complement(&peer.deref().state.pieces, &self.exclude);
                 let req_piece = match want.len() {
                     0 => continue,
-                    _ => select_piece(&want, BLOCK_LENGTH)
+                    _ => slice_piece(&want, &self.piece_length, &BLOCK_LENGTH)
                 };
 
                 println!("{:?}", req_piece);
@@ -148,8 +148,19 @@ impl Spin for GlobalState {
     }
 }
 
-fn select_piece (pieces: &[Piece], piece_length: usize) -> Piece {
-    pieces.first().unwrap().to_owned()
+fn slice_piece (pieces: &[Piece], piece_length: &usize, block_size: &usize) -> Piece {
+    let &Piece {
+        start: ref start,
+        end: ref end
+    } = pieces.first().unwrap();
+
+    let piece = Piece::from(piece_length.to_owned(), start.index, start.offset, block_size.to_owned());
+
+    if end < &piece.end {
+        Piece::new(start.clone(), end.clone())
+    } else {
+        piece
+    }
 }
 
 pub struct DefaultHandler;
