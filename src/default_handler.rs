@@ -161,7 +161,6 @@ impl Spin for GlobalState {
                                 length: req_piece.num_bytes(&self.piece_length) as u32/*BLOCK_LENGTH as u32*/
                             };
 
-                            println!("PO: {:?}", try_decode(&message.to_byte_array()));
                             peer_socket.send_message(message);
 
                         },
@@ -196,17 +195,17 @@ pub struct DefaultHandler;
 /// Handles messages. This is a cheap way to force reactive style
 pub trait Handler {
     type MessageType;
-    fn handle(&mut self, message: Self::MessageType, peer: &mut Peer, global_state: &mut GlobalState);
+    fn handle(&mut self, message: &Self::MessageType, peer: &mut Peer, global_state: &mut GlobalState);
 }
 
 /// The default algorithm
 impl Handler for DefaultHandler {
     type MessageType = Message;
     #[inline]
-    fn handle (&mut self, message: Message, peer: &mut Peer, global: &mut GlobalState) {
+    fn handle (&mut self, message: &Message, peer: &mut Peer, global: &mut GlobalState) {
         println!("{:?}", message);
         match message {
-            Message::Have{piece_index: index} => {
+            &Message::Have{piece_index: index} => {
                 let i = index as usize;
                 global.gpc_incr(i, 1);
                 //peer.state.set_have(i);
@@ -219,16 +218,16 @@ impl Handler for DefaultHandler {
                 }
                 
             },
-            Message::Choke => {
+            &Message::Choke => {
                 peer.state.set_us_choked(true);
             },
-            Message::Unchoke => {
+            &Message::Unchoke => {
                 peer.state.set_us_choked(false);
             },
-            Message::Interested => {
+            &Message::Interested => {
                 peer.state.set_us_interested(true);
             },
-            Message::Bitfield(bitfield) => {
+            &Message::Bitfield(ref bitfield) => {
                 for (index, byte) in bitfield.iter().enumerate() {
                     for i in 0..8 { //cast up so i don't have to deal with overflows
                         let n = 1 & (((*byte as u16) << i) >> (8-i));

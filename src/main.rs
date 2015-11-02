@@ -17,34 +17,47 @@ use bittorrent::default_handler::{Handler, DefaultHandler, GlobalState, Spin};
 /// atm, rust doesn't support HKTs
 /// TODO: the Handler now stores state... so some assumptions no longer hold
 ///
-fn init (mut handler: DefaultHandler) -> (Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>>)>, JoinHandle<()>) {
+fn init (global_arc: Arc<Mutex<GlobalState>>, mut handler: DefaultHandler) -> (Sender<(Message, Arc<RwLock<Peer>>)>, JoinHandle<()>) {
     let (tx, rx) = channel();
     let sink = thread::spawn(move|| {
         loop {
-            let (message, cell, gs_arc): (Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>>) = rx.recv().unwrap();
-            let mut peer_mut_guard = cell.deref().write().unwrap();
-            let mut peer = peer_mut_guard.deref_mut();
+            let (message, cell): (Message, Arc<RwLock<Peer>>) = rx.recv().unwrap();
 
+            let gs_arc = global_arc.clone();
             let mut gs_guard = gs_arc.deref().lock().unwrap();
-            let mut gs = gs_guard.deref_mut();
-            let _ = handler.handle(message, peer, gs);
+
+            {
+                let mut peer_mut_guard = cell.deref().write().unwrap();
+                let mut peer = peer_mut_guard.deref_mut();
+
+                let _ = handler.handle(&message, peer, &mut gs_guard);
+            }
+
+            //acquiring the gs lock can get very expensive. while we have it, try to get more
+            //messages. if we can't nbd - we'll wait for messages when the loop comes back around
+            loop {
+                match rx.try_recv() {
+                    Ok(a) => {
+                        let (ref msg, ref peer_arc) = a;
+                        let mut peer_mg = peer_arc.deref().write().unwrap();
+                        let mut peer_g = peer_mg.deref_mut();
+                        let _ = handler.handle(msg, peer_g, &mut gs_guard);
+                    }
+                    _ => break
+                }
+            }
         }
     });
     (tx, sink)
 }
 
 /// Sets up a transmission based on a single torrent
-fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32) 
-    -> Arc<Mutex<GlobalState>>{
+fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>)>, metadata: &Metadata, listen_port: u32, bytes_dled: u32, global_arc: Arc<Mutex<GlobalState>>) {
     let peer_id = gen_rand_peer_id(PEER_ID_PREFIX);
     let peers = match get_http_tracker_peers(&peer_id, metadata, listen_port, bytes_dled) {
         Some(peers) => peers,
         _ => panic!("cannot get peers from tracker")
     };
-
-    let global_state = GlobalState::new(metadata);
-    let global_arc = Arc::new(Mutex::new(global_state));
-
     println!("got {} peers", peers.len());
 
     for peer in peers {
@@ -79,7 +92,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>
                         //outgoing messages over TCP
                         match reader.wait_for_message() {
                             Ok(message) => {
-                                let _ = tx.send((message, arc.clone(), ga.clone()));
+                                let _ = tx.send((message, arc.clone()));
                             },
                             Err(e) => {
                                 println!("error waiting for message: {:?}", e);
@@ -96,7 +109,6 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>
             };
         });
     }
-    global_arc
 }
 
 fn main () {
@@ -112,14 +124,17 @@ fn main () {
         _ => panic!("no valid information in torrent file")
     }.unwrap();
 
-    let (tx, sink) = init(DefaultHandler);
+    let global_state = GlobalState::new(&metadata);
+    let global_arc = Arc::new(Mutex::new(global_state));
+
+    let (tx, sink) = init(global_arc.clone(), DefaultHandler);
 
     //for now initialize torrents inline with main
-    let gs_arc = init_torrent(&tx, &metadata, 6887, 0);
+    init_torrent(&tx, &metadata, 6887, 0, global_arc.clone());
 
     let spin_thread = thread::spawn(move || {
         loop {
-            let gs = gs_arc.clone();
+            let gs = global_arc.clone();
 
             let mut guard = (&gs).lock().unwrap();
             (&mut guard).deref_mut().spin();

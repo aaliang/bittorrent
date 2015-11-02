@@ -70,8 +70,6 @@ impl Piece {
 
     //start is inclusive, end is exclusive
     pub fn from (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
-        println!("p {}", piece_length);
-        
         let bytes_to_fill = piece_length - offset;
 
         if bytes < bytes_to_fill {
