@@ -42,7 +42,7 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>, Arc<Mutex<GlobalState>
         _ => panic!("cannot get peers from tracker")
     };
 
-    let global_state = GlobalState::new(metadata.piece_length.clone() as usize);
+    let global_state = GlobalState::new(metadata);
     let global_arc = Arc::new(Mutex::new(global_state));
 
     println!("got {} peers", peers.len());

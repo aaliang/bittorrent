@@ -221,7 +221,10 @@ impl Piece {
                             }
                         }
                     }
-                    else { panic!("this is bad")}
+                    else {
+                        println!("vec: {:?}, new_block: {:?}", arr, new_block);
+                        panic!("this is bad");
+                    }
                 };
 
                 match something {
@@ -233,6 +236,7 @@ impl Piece {
                 }
             }
             //if (win_left > win_right) {
+            println!("vec: {:?}, new_block: {:?}", arr, new_block);
             panic!("this is also bad");
             //}
         }

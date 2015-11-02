@@ -19,7 +19,7 @@ impl <T> BufferedReader <T> where T:Read {
 
     pub fn wait_for_message(&mut self) -> Result<Message> {
         loop {
-            let mut i_buff = [0; 512];
+            let mut i_buff = [0; 1024];
             match self.readable.read(&mut i_buff) {
                 Ok(0) => return Err(Error::new(ErrorKind::Other, "graceful disconnect")),
                 Ok(bytes_read) => {

@@ -8,7 +8,7 @@ use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
 use std::ops::{Deref, DerefMut};
 use rand::{Rng, thread_rng};
-
+use metadata::Metadata;
 const BLOCK_LENGTH:usize = 16384; //block length in bytes
 
 pub struct GlobalState {
@@ -16,25 +16,25 @@ pub struct GlobalState {
     pub owned: Vec<u8>,
     pub owned_pieces: Vec<Piece>,
     pub request_map: Vec<u8>,
-    pub exclude: Vec<Piece>,
     pub requests: Vec<(Piece)>,
     s_request_map: Vec<u8>,
     piece_length: usize,
+    pieces_hash: Vec<u8>,
     peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream, i64)>
 }
 
 impl GlobalState {
-    pub fn new (piece_length: usize) -> GlobalState {
+    pub fn new (metadata: &Metadata) -> GlobalState {
         GlobalState {
             gpc: vec![],
             owned: vec![],
             owned_pieces: vec![],
-            exclude: vec![],
             request_map: vec![],
             requests: vec![],
             s_request_map: vec![],
             peer_list: vec![],
-            piece_length: piece_length
+            piece_length: metadata.piece_length as usize,
+            pieces_hash: metadata.pieces.clone()
         }
     }
 
@@ -112,12 +112,6 @@ impl GlobalState {
     pub fn unclaimed_fields (&self) -> Vec<u8> {
         nand_slice_vbr_len(&self.owned, &self.request_map)
     }
-
-    #[inline]
-    pub fn req (&mut self, peer_bitfield: &Vec<u8>) {
-        let index = self.rarest_wrt_peer(peer_bitfield);
-        println!("REQ: {:?}", index);
-    }
 }
 
 pub trait Spin {
@@ -130,6 +124,11 @@ impl Spin for GlobalState {
     fn spin (&mut self) {
         //NOTE: this shuffles the peer_list
         thread_rng().shuffle(&mut self.peer_list);
+
+        let mut exclude = self.owned_pieces.clone();
+        for request in self.requests.iter() {
+            Piece::add_to_boundary_vec(&mut exclude, request.clone());
+        }
 
         for tup in self.peer_list.iter_mut() {
             let (ref rw_lock_peer, ref mut peer_socket, ref mut timestamp) = *tup;
@@ -145,18 +144,15 @@ impl Spin for GlobalState {
                         Ok(a) => a,
                         Err(_) => continue//do nothing. it's locked
                     };
-                    //TODO: owned_pieces is not sufficient. it should be the union of owned_pieces and
-                    //requests
-                    let want = Piece::complement(&peer.deref().state.pieces, &self.exclude);
+                    let want = Piece::complement(&peer.deref().state.pieces, &exclude);
                     let req_piece = match want.len() {
                         0 => continue,
                         _ => slice_piece(&want, &self.piece_length, &BLOCK_LENGTH)
                     };
 
-                    //println!("{:?}", req_piece);
                     self.requests.push(req_piece.clone());
-                     let index = Piece::add_to_boundary_vec(&mut self.exclude, req_piece.clone());
-                    Piece::compact_if_possible(&mut self.exclude, index);
+                    let index = Piece::add_to_boundary_vec(&mut exclude, req_piece.clone());
+                    Piece::compact_if_possible(&mut exclude, index);
 
                     let message = Message::Request{
                         index: req_piece.start.index as u32,
@@ -207,7 +203,7 @@ impl Handler for DefaultHandler {
                 let i = index as usize;
                 global.gpc_incr(i, 1);
                 //peer.state.set_have(i);
-                let piece = Piece::from(BLOCK_LENGTH, i, 0, BLOCK_LENGTH);
+                let piece = Piece::from(global.piece_length, i, 0, global.piece_length);
                 let i_index = Piece::add_to_boundary_vec(&mut global.owned_pieces, piece);
                 Piece::compact_if_possible(&mut global.owned_pieces, i_index);
             },
