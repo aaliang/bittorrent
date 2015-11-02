@@ -1,6 +1,6 @@
 extern crate time;
 
-use bt_messages::Message;
+use bt_messages::{Message, try_decode};
 use buffered_reader::BufferedReader;
 use chunk::{Position, Piece};
 use peer::{Peer, SendPeerMessage};
@@ -17,6 +17,7 @@ pub struct GlobalState {
     pub owned_pieces: Vec<Piece>,
     pub request_map: Vec<u8>,
     pub exclude: Vec<Piece>,
+    pub requests: Vec<(Piece)>,
     s_request_map: Vec<u8>,
     piece_length: usize,
     peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream, i64)>
@@ -30,6 +31,7 @@ impl GlobalState {
             owned_pieces: vec![],
             exclude: vec![],
             request_map: vec![],
+            requests: vec![],
             s_request_map: vec![],
             peer_list: vec![],
             piece_length: piece_length
@@ -122,6 +124,8 @@ pub trait Spin {
     fn spin (&mut self);
 }
 
+const WANT_LIMIT:usize = 50;
+
 impl Spin for GlobalState {
     fn spin (&mut self) {
         //NOTE: this shuffles the peer_list
@@ -132,27 +136,38 @@ impl Spin for GlobalState {
             {
                 let now = time::get_time().sec;
                 if timestamp < &mut(now - 120) {
-                    println!("keepalive");
                     peer_socket.send_message(Message::KeepAlive);
                     *timestamp = now; 
                 }
 
-                let peer = match rw_lock_peer.try_read() { 
-                    Ok(a) => a,
-                    Err(_) => continue//do nothing. it's locked
-                };
-                //TODO: owned_pieces is not sufficient. it should be the union of owned_pieces and
-                //requests
-                let want = Piece::complement(&peer.deref().state.pieces, &self.exclude);
-                let req_piece = match want.len() {
-                    0 => continue,
-                    _ => slice_piece(&want, &self.piece_length, &BLOCK_LENGTH)
-                };
+                if self.requests.len() < WANT_LIMIT {
+                     let peer = match rw_lock_peer.try_read() { 
+                        Ok(a) => a,
+                        Err(_) => continue//do nothing. it's locked
+                    };
+                    //TODO: owned_pieces is not sufficient. it should be the union of owned_pieces and
+                    //requests
+                    let want = Piece::complement(&peer.deref().state.pieces, &self.exclude);
+                    let req_piece = match want.len() {
+                        0 => continue,
+                        _ => slice_piece(&want, &self.piece_length, &BLOCK_LENGTH)
+                    };
 
-                println!("{:?}", req_piece);
+                    //println!("{:?}", req_piece);
+                    self.requests.push(req_piece.clone());
+                     let index = Piece::add_to_boundary_vec(&mut self.exclude, req_piece.clone());
+                    Piece::compact_if_possible(&mut self.exclude, index);
 
-                let index = Piece::add_to_boundary_vec(&mut self.exclude, req_piece);
-                Piece::compact_if_possible(&mut self.exclude, index);
+                    let message = Message::Request{
+                        index: req_piece.start.index as u32,
+                        begin: req_piece.start.offset as u32,
+                        length: req_piece.num_bytes(&self.piece_length) as u32/*BLOCK_LENGTH as u32*/
+                    };
+
+                    println!("PO: {:?}", try_decode(&message.to_byte_array()));
+                    peer_socket.send_message(message);
+
+                }
             }
         }
     }
@@ -160,8 +175,8 @@ impl Spin for GlobalState {
 
 fn slice_piece (pieces: &[Piece], piece_length: &usize, block_size: &usize) -> Piece {
     let &Piece {
-        start: ref start,
-        end: ref end
+        ref start,
+        ref end
     } = pieces.first().unwrap();
 
     let piece = Piece::from(piece_length.to_owned(), start.index, start.offset, block_size.to_owned());

@@ -63,6 +63,10 @@ impl Piece {
         Self::new(Position::new(a, b), Position::new(c, d))
     }
 
+    pub fn num_bytes(&self, block_size: &usize) -> usize {
+        (self.end.index * block_size + self.end.offset)
+            - (self.start.index * block_size + self.start.offset)
+    }
 
     //start is inclusive, end is exclusive
     pub fn from (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
@@ -185,7 +189,7 @@ impl Piece {
             0
         } else {
             let (mut win_left, mut win_right) = (0, arr.len());
-            while win_left < win_right { //should probably just use loop {}
+            while win_left <= win_right { //should probably just use loop {}
                 let arr_index = (win_left+win_right)/2;
                 let something = {
                     let block = &arr[arr_index];
