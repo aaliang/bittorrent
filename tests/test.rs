@@ -175,7 +175,7 @@ fn test_request_block_with_compaction () {
 
         let expect = Piece::new(Position::new(index, offset), Position::new(index, piece_length - 1));
         let block = Piece::from(piece_length, index, offset, bytes);
-        Piece::add_to_boundary_vec(&mut vec, block)
+        Piece::add_to_boundary_vec(&mut vec, block).unwrap()
     };
 
     Piece::compact_if_possible(&mut vec, index);

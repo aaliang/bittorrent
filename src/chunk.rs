@@ -95,7 +95,7 @@ impl Piece {
             let overflow = rem_bytes % piece_length;
             let index_o = rem_bytes / piece_length;
 
-            temp_end.index + index_o;
+            temp_end.index += index_o;
             temp_end.offset = overflow;
 
             Piece {

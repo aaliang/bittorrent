@@ -170,7 +170,6 @@ impl Spin for GlobalState {
                             panic!(e);
                         }
                     }
-                   
                 }
             }
         }
