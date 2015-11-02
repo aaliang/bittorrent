@@ -118,7 +118,7 @@ pub trait Spin {
     fn spin (&mut self);
 }
 
-const WANT_LIMIT:usize = 50;
+const WANT_LIMIT:usize = 120;
 
 impl Spin for GlobalState {
     fn spin (&mut self) {
@@ -151,18 +151,26 @@ impl Spin for GlobalState {
                     };
 
                     self.requests.push(req_piece.clone());
-                    let index = Piece::add_to_boundary_vec(&mut exclude, req_piece.clone());
-                    Piece::compact_if_possible(&mut exclude, index);
+                    match Piece::add_to_boundary_vec(&mut exclude, req_piece.clone()) {
+                        Ok(index) => {
+                            Piece::compact_if_possible(&mut exclude, index);
 
-                    let message = Message::Request{
-                        index: req_piece.start.index as u32,
-                        begin: req_piece.start.offset as u32,
-                        length: req_piece.num_bytes(&self.piece_length) as u32/*BLOCK_LENGTH as u32*/
-                    };
+                            let message = Message::Request{
+                                index: req_piece.start.index as u32,
+                                begin: req_piece.start.offset as u32,
+                                length: req_piece.num_bytes(&self.piece_length) as u32/*BLOCK_LENGTH as u32*/
+                            };
 
-                    println!("PO: {:?}", try_decode(&message.to_byte_array()));
-                    peer_socket.send_message(message);
+                            println!("PO: {:?}", try_decode(&message.to_byte_array()));
+                            peer_socket.send_message(message);
 
+                        },
+                        Err(e) => {
+                            println!("owned: {:?}, requests: {:?}", self.owned_pieces, self.requests);
+                            panic!(e);
+                        }
+                    }
+                   
                 }
             }
         }
@@ -204,8 +212,13 @@ impl Handler for DefaultHandler {
                 global.gpc_incr(i, 1);
                 //peer.state.set_have(i);
                 let piece = Piece::from(global.piece_length, i, 0, global.piece_length);
-                let i_index = Piece::add_to_boundary_vec(&mut global.owned_pieces, piece);
-                Piece::compact_if_possible(&mut global.owned_pieces, i_index);
+                match Piece::add_to_boundary_vec(&mut global.owned_pieces, piece) {
+                    Ok(i_index) => Piece::compact_if_possible(&mut global.owned_pieces, i_index),
+                    Err(e) => {
+                        panic!(e);
+                    }
+                }
+                
             },
             Message::Choke => {
                 peer.state.set_us_choked(true);
@@ -223,7 +236,6 @@ impl Handler for DefaultHandler {
                         global.gpc_incr(index*8+i, n);
                     }
                 }
-
                 peer.state.set_pieces_from_bitfield(&bitfield);
                 //peer.state.set_bitfield(bitfield);
             },

@@ -70,24 +70,42 @@ impl Piece {
 
     //start is inclusive, end is exclusive
     pub fn from (piece_length: usize, index: usize, offset: usize, bytes: usize) -> Piece {
-        let num_whole_pieces = bytes/piece_length;
-        let rem_offset = (offset + bytes) % piece_length;
-        let carry = if (offset+bytes)/piece_length > 0 {
-            1
+        println!("p {}", piece_length);
+        
+        let bytes_to_fill = piece_length - offset;
+
+        if bytes < bytes_to_fill {
+            Piece {
+                start: Position {
+                    index: index,
+                    offset: offset
+                },
+                end: Position {
+                    index: index,
+                    offset: offset + bytes
+                }
+            }
         } else {
-            0
-        };
+            let mut temp_end = Position {
+                index: index+1,
+                offset: 0
+            };
 
-        let start = Position {
-            index: index,
-            offset: offset
-        };
-        let end = Position {
-            index: index + num_whole_pieces + carry,
-            offset: rem_offset
-        };
+            let rem_bytes = bytes - bytes_to_fill;
+            let overflow = rem_bytes % piece_length;
+            let index_o = rem_bytes / piece_length;
 
-        Piece{start: start, end: end}
+            temp_end.index + index_o;
+            temp_end.offset = overflow;
+
+            Piece {
+                start: Position {
+                    index: index, 
+                    offset: offset
+                },
+                end: temp_end
+            }
+        }
     }
 
     pub fn convert_bitfield_to_piece_vec (bitfield: &[u8]) -> Vec<Piece> {
@@ -179,14 +197,14 @@ impl Piece {
 
     #[inline]
     ///returns the index at which the chunk was inserted into the vector
-    pub fn add_to_boundary_vec(arr: &mut Vec<Piece>, new_block: Piece) -> usize {
+    pub fn add_to_boundary_vec(arr: &mut Vec<Piece>, new_block: Piece) -> Result<usize, String> {
         //let new_block = DefaultHandler::get_block_boundaries(piece_length, index, offset, bytes);
         if arr.len() == 0 || new_block.start >= arr.last().unwrap().end {
             arr.push(new_block);
-            arr.len() - 1
+            Ok(arr.len() - 1)
         } else if new_block.end <= arr.first().unwrap().start {
             arr.insert(0, new_block);
-            0
+            Ok(0)
         } else {
             let (mut win_left, mut win_right) = (0, arr.len());
             while win_left <= win_right { //should probably just use loop {}
@@ -222,15 +240,14 @@ impl Piece {
                         }
                     }
                     else {
-                        println!("vec: {:?}, new_block: {:?}", arr, new_block);
-                        panic!("this is bad");
+                        return Err(format!("veci {:?}, new_block: {:?}", arr, new_block))
                     }
                 };
 
                 match something {
                     Some(i) => {
                         arr.insert(i, new_block);
-                        return i
+                        return Ok(i)
                     },
                     _ => ()
                 }
