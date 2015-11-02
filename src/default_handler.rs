@@ -210,8 +210,8 @@ impl Handler for DefaultHandler {
                 global.gpc_incr(i, 1);
                 //peer.state.set_have(i);
                 let piece = Piece::from(global.piece_length, i, 0, global.piece_length);
-                match Piece::add_to_boundary_vec(&mut global.owned_pieces, piece) {
-                    Ok(i_index) => Piece::compact_if_possible(&mut global.owned_pieces, i_index),
+                match Piece::add_to_boundary_vec(&mut peer.state.pieces, piece) {
+                    Ok(i_index) => Piece::compact_if_possible(&mut peer.state.pieces, i_index),
                     Err(e) => {
                         panic!(e);
                     }

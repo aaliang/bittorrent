@@ -29,7 +29,6 @@ fn init (global_arc: Arc<Mutex<GlobalState>>, mut handler: DefaultHandler) -> (S
             {
                 let mut peer_mut_guard = cell.deref().write().unwrap();
                 let mut peer = peer_mut_guard.deref_mut();
-
                 let _ = handler.handle(&message, peer, &mut gs_guard);
             }
 
@@ -145,8 +144,14 @@ fn main () {
 
     //block until the sink shuts down
     let _ = sink.join();
+    //test();
 }
 
+/*fn test() {
+    use bittorrent::chunk::Piece;
+    let bitfield = vec![];
+    let vec = Piece::convert_bitfield_to_piece_vec(&bitfield);
 
-
-
+    let piece = Piece::from(10, 1, 0, 10);
+    println!("{:?}", vec);
+}*/
