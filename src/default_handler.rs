@@ -20,7 +20,7 @@ pub struct GlobalState {
     s_request_map: Vec<u8>,
     piece_length: usize,
     pieces_hash: Vec<u8>,
-    peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream, i64)>
+    peer_list: Vec<(Arc<RwLock<Peer>>, TcpStream, i64, Vec<u8>)>
 }
 
 impl GlobalState {
@@ -38,9 +38,15 @@ impl GlobalState {
         }
     }
 
-    pub fn add_new_peer (&mut self, peer: Arc<RwLock<Peer>>, stream: TcpStream) {
+    pub fn add_new_peer (&mut self, peer: Arc<RwLock<Peer>>, stream: TcpStream, peer_id: Vec<u8>) {
         let last_checkin = time::get_time().sec;
-        self.peer_list.push((peer, stream, last_checkin));
+        self.peer_list.push((peer, stream, last_checkin, peer_id));
+    }
+
+    pub fn remove_peer(&mut self, id: &[u8]) {
+        self.peer_list.retain(|x| {
+            &x.3[..] != id
+        });
     }
 
     /// Increases the value of gpc[piece_index] by n
@@ -131,16 +137,16 @@ impl Spin for GlobalState {
         }
 
         for tup in self.peer_list.iter_mut() {
-            let (ref rw_lock_peer, ref mut peer_socket, ref mut timestamp) = *tup;
+            let (ref rw_lock_peer, ref mut peer_socket, ref mut timestamp, _) = *tup;
             {
                 let now = time::get_time().sec;
                 if timestamp < &mut(now - 120) {
                     peer_socket.send_message(Message::KeepAlive);
-                    *timestamp = now; 
+                    *timestamp = now;
                 }
 
                 if self.requests.len() < WANT_LIMIT {
-                     let peer = match rw_lock_peer.try_read() { 
+                     let peer = match rw_lock_peer.try_read() {
                         Ok(a) => a,
                         Err(_) => continue//do nothing. it's locked
                     };
@@ -216,7 +222,7 @@ impl Handler for DefaultHandler {
                         panic!(e);
                     }
                 }
-                
+
             },
             &Message::Choke => {
                 peer.state.set_us_choked(true);
@@ -237,8 +243,7 @@ impl Handler for DefaultHandler {
                 peer.state.set_pieces_from_bitfield(&bitfield);
                 //peer.state.set_bitfield(bitfield);
             },
-            _ => {
-            }
+            _ => {}
         };
     }
 }

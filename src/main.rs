@@ -22,7 +22,6 @@ fn init (global_arc: Arc<Mutex<GlobalState>>, mut handler: DefaultHandler) -> (S
     let sink = thread::spawn(move|| {
         loop {
             let (message, cell): (Message, Arc<RwLock<Peer>>) = rx.recv().unwrap();
-
             let gs_arc = global_arc.clone();
             let mut gs_guard = gs_arc.deref().lock().unwrap();
 
@@ -32,8 +31,9 @@ fn init (global_arc: Arc<Mutex<GlobalState>>, mut handler: DefaultHandler) -> (S
                 let _ = handler.handle(&message, peer, &mut gs_guard);
             }
 
-            //acquiring the gs lock can get very expensive. while we have it, try to get more
-            //messages. if we can't nbd - we'll wait for messages when the loop comes back around
+            //acquiring the gs lock can get very expensive especially in early stage when many
+            //messages flood in. while we have it, try to get more messages. if we can't nbd -
+            //we'll wait for messages when the loop comes back around
             loop {
                 match rx.try_recv() {
                     Ok(a) => {
@@ -82,9 +82,8 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>)>, metadata: &Metadata,
                         let _ga = ga.clone();
                         let mut _y = (&_ga).lock().unwrap();
                         let mut _x = _y.deref_mut();
-                        _x.add_new_peer(arc.clone(), pstream);
+                        _x.add_new_peer(arc.clone(), pstream, peer_id.to_owned());
                     } //release da lock
-
 
                     loop {
                         //we can't just block read in a loop - we'll never have a chance to send out
@@ -95,6 +94,11 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>)>, metadata: &Metadata,
                             },
                             Err(e) => {
                                 println!("error waiting for message: {:?}", e);
+                                let _ga = ga.clone();
+                                let gstate = &mut _ga.deref().lock().unwrap();
+
+                                gstate.remove_peer(&peer_id);
+
                                 //TODO: need to signal the handler thread that the client has
                                 //disconnected
                                 break;
