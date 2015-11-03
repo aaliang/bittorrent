@@ -3,7 +3,7 @@
 A bottom up implementation of a bittorrent client using rust. There are still outstanding known issues but you are welcome to test it out and critique. For the most part the components are stable and the client can transfer robustly according to standard bittorrent protocol.
 
 ```
-$ cargo run --bin main cargo run --bin main Ubuntu\ 15.04\ Desktop\ %2864-bit%29.torrent
+$ cargo run --bin main Ubuntu\ 15.04\ Desktop\ %2864-bit%29.torrent
 ```
 
 ## Component design
