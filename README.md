@@ -11,7 +11,7 @@ $ cargo run --bin main cargo run --bin main Ubuntu\ 15.04\ Desktop\ %2864-bit%29
 2. It is able to ping trackers and receive peer addresses
 3. It is able to connect via TCP to peers
 4. It is able to handshake with peers
-5. Decodes messages from streams (Read implementers)
+5. Decodes messages from raw byte streams (Read implementers)
 6. Handles messages reactively
 7. Concurrently reads and writes from TCP sockets
 8. Sparse bitfield operations, implemented as a vector of ranges
@@ -27,7 +27,6 @@ $ cargo run --bin main cargo run --bin main Ubuntu\ 15.04\ Desktop\ %2864-bit%29
 
 These will probably be deferred until RC because I've gotten most of what I wanted to cover within 3 weeks and the rest might be better served after my batch.
 
-## Component design
 Currently this is taking a multi-threaded approach, one spawned thread per peer to read (and only read) from a TCP socket. (use of mio is out of scope as my personal feeling is that mio is not at the level of maturity that I require yet)
 
 A single 'sink' thread is also spawned that handles assembled messages built from incoming packets read from client sockets. This is inspired by an actor model (not unlike akka) and it updates a shared state object.
@@ -38,11 +37,11 @@ The main thread does initial parsing of bencoded torrent files and the pinging o
 
 Global state is protected by mutexes and read-write locks with relatively low overhead (less than 1ms to acquire). It is possible to add more sinks and spinners trivially but I personally don't see a use case yet.
 
-### RC presentation slides to come
-
 ##Aside from that
 Additionally DHT and PEX are not supported currently (neither are magnet links) but maybe will be in the future.
 Only HTTP(S) trackers are supported currently (UDP is also on the laundry list)
 
 With the exception of the combine parser, random, and url library this is done completely using stable rust (1.3.0)
 Included as a local dependency is a standalone bencode crate which provides facilities for deserializing byte streams to objects and serializing back to bytes. This is built on top of the combine library and extends the combinators by adding a 'take' combinator as well as its 'SizedBuffer' companion perhaps someday I will submit a PR back to combine :). By itself it takes almost 10 seconds to compile, which is part of the reason why it's in its own crate.
+
+More directions to come.
