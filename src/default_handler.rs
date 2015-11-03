@@ -16,7 +16,7 @@ pub struct GlobalState {
     pub owned: Vec<u8>,
     pub owned_pieces: Vec<Piece>,
     pub request_map: Vec<u8>,
-    pub requests: Vec<(Piece)>,
+    pub requests: Vec<(Piece, i64)>,
     s_request_map: Vec<u8>,
     piece_length: usize,
     pieces_hash: Vec<u8>,
@@ -124,15 +124,19 @@ pub trait Spin {
     fn spin (&mut self);
 }
 
-const WANT_LIMIT:usize = 120;
+const WANT_LIMIT:usize = 1280;
+const EXPIRE_FACTOR:usize = 3;
+const MIN_TIMEOUT:usize = 15;
 
 impl Spin for GlobalState {
     fn spin (&mut self) {
         //NOTE: this shuffles the peer_list
+        println!("{} peers", self.peer_list.len());
         thread_rng().shuffle(&mut self.peer_list);
 
         let mut exclude = self.owned_pieces.clone();
-        for request in self.requests.iter() {
+
+        for &(ref request, _) in self.requests.iter() {
             Piece::add_to_boundary_vec(&mut exclude, request.clone());
         }
 
@@ -156,7 +160,8 @@ impl Spin for GlobalState {
                         _ => slice_piece(&want, &self.piece_length, &BLOCK_LENGTH)
                     };
 
-                    self.requests.push(req_piece.clone());
+                    self.requests.push((req_piece.clone(), time::get_time().sec));
+
                     match Piece::add_to_boundary_vec(&mut exclude, req_piece.clone()) {
                         Ok(index) => {
                             Piece::compact_if_possible(&mut exclude, index);
@@ -177,6 +182,22 @@ impl Spin for GlobalState {
                     }
                 }
             }
+        }
+
+        println!("rlen: {}", self.requests.len());
+        if self.requests.len() >= WANT_LIMIT {
+
+            let mut num_to_expire = WANT_LIMIT/EXPIRE_FACTOR;
+            let now = time::get_time().sec;
+            self.requests.retain(|&(ref x, ref y)| {
+                if *y < now - 18 && num_to_expire > 0 {
+                    num_to_expire -= 1;
+                    false
+                }
+                else {
+                    true
+                }
+            });
         }
     }
 }

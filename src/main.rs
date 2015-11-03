@@ -89,13 +89,11 @@ fn init_torrent (tx: &Sender<(Message, Arc<RwLock<Peer>>)>, metadata: &Metadata,
                         //we can't just block read in a loop - we'll never have a chance to send out
                         //outgoing messages over TCP
                         match reader.wait_for_message() {
-                            Ok(message) => {
-                                let _ = tx.send((message, arc.clone()));
-                            },
+                            Ok(message) => tx.send((message, arc.clone())),
                             Err(e) => {
                                 println!("error waiting for message: {:?}", e);
                                 let _ga = ga.clone();
-                                let gstate = &mut _ga.deref().lock().unwrap();
+                                let mut gstate =  _ga.deref().lock().unwrap();
 
                                 gstate.remove_peer(&peer_id);
 
