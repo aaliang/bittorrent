@@ -2,6 +2,10 @@
 
 A ground up implementation of a bittorrent client using rust. This is still unfinished but you are welcome to follow along and critique :)
 
+```
+$ cargo run --bin main cargo run --bin main Ubuntu\ 15.04\ Desktop\ %2864-bit%29.torrent
+```
+
 ## Current status
 1. currently this is able to parse bencoded metadata (torrent files) and responses from HTTP(S) trackers.
 2. It is able to ping trackers and receive peer addresses
