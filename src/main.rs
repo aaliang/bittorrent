@@ -1,5 +1,6 @@
 extern crate bencode;
 extern crate bittorrent;
+extern crate time;
 
 use std::{env, thread};
 use std::thread::{JoinHandle};
@@ -22,9 +23,8 @@ fn init (global_arc: Arc<Mutex<GlobalState>>, mut handler: DefaultHandler) -> (S
     let sink = thread::spawn(move|| {
         loop {
             let (message, cell): (Message, Arc<RwLock<Peer>>) = rx.recv().unwrap();
-            let gs_arc = global_arc.clone();
-            let mut gs_guard = gs_arc.deref().lock().unwrap();
 
+            let mut gs_guard = (&global_arc).lock().unwrap();
             {
                 let mut peer_mut_guard = cell.deref().write().unwrap();
                 let mut peer = peer_mut_guard.deref_mut();
@@ -39,6 +39,7 @@ fn init (global_arc: Arc<Mutex<GlobalState>>, mut handler: DefaultHandler) -> (S
                     Ok(a) => {
                         let (ref msg, ref peer_arc) = a;
                         let mut peer_mg = peer_arc.deref().write().unwrap();
+
                         let mut peer_g = peer_mg.deref_mut();
                         let _ = handler.handle(msg, peer_g, &mut gs_guard);
                     }
@@ -135,12 +136,14 @@ fn main () {
 
     let spin_thread = thread::spawn(move || {
         loop {
-            let gs = global_arc.clone();
+            {
+                let gs = global_arc.clone();
 
-            let mut guard = (&gs).lock().unwrap();
-            (&mut guard).deref_mut().spin();
+                let mut guard = (&gs).lock().unwrap();
+                (&mut guard).deref_mut().spin();
+            }
 
-            thread::sleep_ms(800);
+            thread::sleep_ms(1000);
         }
     });
 

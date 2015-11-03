@@ -124,8 +124,8 @@ pub trait Spin {
     fn spin (&mut self);
 }
 
-const WANT_LIMIT:usize = 1280;
-const EXPIRE_FACTOR:usize = 3;
+const WANT_LIMIT:usize = 1500;
+const EXPIRE_FACTOR:usize = 2;
 const MIN_TIMEOUT:usize = 15;
 
 impl Spin for GlobalState {
@@ -184,7 +184,6 @@ impl Spin for GlobalState {
             }
         }
 
-        println!("rlen: {}", self.requests.len());
         if self.requests.len() >= WANT_LIMIT {
 
             let mut num_to_expire = WANT_LIMIT/EXPIRE_FACTOR;
