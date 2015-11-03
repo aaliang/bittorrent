@@ -7,7 +7,7 @@ $ cargo run --bin main Ubuntu\ 15.04\ Desktop\ %2864-bit%29.torrent
 ```
 
 ## Component design
-Currently this is taking a multi-threaded approach, one spawned thread per peer to read (and only read) from a TCP socket. (use of mio is out of scope as my personal feeling is that mio is not at the level of maturity that I require yet)
+This is a multi-threaded approach, one spawned thread per peer to read (and only read) from a TCP socket. (use of mio is out of scope as my personal feeling is that mio is not at the level of maturity that I require yet)
 
 A single 'sink' thread is also spawned that handles assembled messages built from incoming packets read from client sockets. This is inspired by an actor model (not unlike akka) and it updates a shared state object.
 
@@ -18,7 +18,7 @@ The main thread does initial parsing of bencoded torrent files and the pinging o
 Global state is protected by mutexes and read-write locks with relatively low overhead (less than 1ms to acquire). It is possible to add more sinks and spinners trivially but I personally don't see a use case yet.
 
 ## Current status
-1. currently this is able to parse bencoded metadata (torrent files) and responses from HTTP(S) trackers.
+1. Parses bencoded metadata (torrent files) and responses from HTTP(S) trackers.
 2. It is able to ping trackers and receive peer addresses
 3. It is able to connect via TCP to peers
 4. It is able to handshake with peers
@@ -26,7 +26,7 @@ Global state is protected by mutexes and read-write locks with relatively low ov
 6. Handles messages reactively
 7. Concurrently reads and writes from TCP sockets
 8. Sparse bitfield operations, implemented as a vector of ranges
-9. State passing between actor style threads (threadsafe)
+9. State passing between actor style threads (threadsafe) (though they're more accurately CSP style)
 10. Packet request, downloading and order.
 11. Timeout, request strategy
 
@@ -35,8 +35,9 @@ Global state is protected by mutexes and read-write locks with relatively low ov
 2. Persistence (in memory and on fs)
 3. Uploading to peers
 4. Peer discovery (after initial tracker calls)
+5. Cancel timed out pieces - this will probably save significant bandwidth on a long timeline
 
-These will probably be deferred until RC because I've gotten most of what I wanted to cover within 3 weeks and the rest might be better served after my batch.
+These will probably be deferred until after RC because I've gotten most of what I wanted to cover within 3 weeks and the rest might be better served after my batch.
 
 ##Aside from that
 Additionally DHT and PEX are not supported currently (neither are magnet links) but maybe will be in the future.
