@@ -17,6 +17,8 @@ The main thread does initial parsing of bencoded torrent files and the pinging o
 
 Global state is protected by mutexes and read-write locks with relatively low overhead (less than 1ms to acquire). It is possible to add more sinks and spinners trivially but I personally don't see a use case yet.
 
+![alt text](https://github.com/aaliang/bittorrent/blob/master/components.JPG)
+
 ## Current status
 1. Parses bencoded metadata (torrent files) and responses from HTTP(S) trackers.
 2. It is able to ping trackers and receive peer addresses
