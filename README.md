@@ -38,6 +38,7 @@ Global state is protected by mutexes and read-write locks with relatively low ov
 3. Uploading to peers
 4. Peer discovery (after initial tracker calls)
 5. Cancel timed out pieces - this will probably save significant bandwidth on a long timeline
+6. Undefined behavior if chunk length does not divide piece length
 
 These will probably be deferred until after RC because I've gotten most of what I wanted to cover within 3 weeks and the rest might be better served after my batch.
 
